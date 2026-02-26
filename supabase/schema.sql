@@ -4,11 +4,35 @@
 create extension if not exists pgcrypto;
 
 -- ===== Enums =====
-create type public.user_role as enum ('user', 'admin');
-create type public.order_type as enum ('buy', 'sell');
-create type public.order_status as enum ('pending', 'executed', 'cancelled', 'failed');
-create type public.job_type as enum ('close_compute', 'publish');
-create type public.job_status as enum ('queued', 'running', 'success', 'failed');
+do $$ begin
+  create type public.user_role as enum ('user', 'admin');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.order_type as enum ('buy', 'sell');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.order_status as enum ('pending', 'executed', 'cancelled', 'failed');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.job_type as enum ('close_compute', 'publish');
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$ begin
+  create type public.job_status as enum ('queued', 'running', 'success', 'failed');
+exception
+  when duplicate_object then null;
+end $$;
 
 -- ===== Profiles and wallets =====
 create table if not exists public.profiles (
@@ -229,18 +253,30 @@ alter table public.wallet_ledger enable row level security;
 alter table public.daily_user_metrics enable row level security;
 
 -- User can read own profile/wallet/etc.
-create policy if not exists profiles_select_own on public.profiles for select using (auth.uid() = id);
-create policy if not exists wallets_select_own on public.wallets for select using (auth.uid() = user_id);
-create policy if not exists opinions_select_own on public.opinions for select using (auth.uid() = user_id);
-create policy if not exists opinions_insert_own on public.opinions for insert with check (auth.uid() = user_id);
-create policy if not exists assignments_select_own on public.opinion_assignments for select using (auth.uid() = viewer_user_id);
-create policy if not exists votes_select_own on public.opinion_votes for select using (auth.uid() = voter_user_id);
-create policy if not exists votes_insert_own on public.opinion_votes for insert with check (auth.uid() = voter_user_id);
-create policy if not exists holdings_select_own on public.holdings for select using (auth.uid() = user_id);
-create policy if not exists orders_select_own on public.orders for select using (auth.uid() = user_id);
-create policy if not exists orders_insert_own on public.orders for insert with check (auth.uid() = user_id);
-create policy if not exists ledger_select_own on public.wallet_ledger for select using (auth.uid() = user_id);
-create policy if not exists metrics_select_own on public.daily_user_metrics for select using (auth.uid() = user_id);
+drop policy if exists profiles_select_own on public.profiles;
+create policy profiles_select_own on public.profiles for select using (auth.uid() = id);
+drop policy if exists wallets_select_own on public.wallets;
+create policy wallets_select_own on public.wallets for select using (auth.uid() = user_id);
+drop policy if exists opinions_select_own on public.opinions;
+create policy opinions_select_own on public.opinions for select using (auth.uid() = user_id);
+drop policy if exists opinions_insert_own on public.opinions;
+create policy opinions_insert_own on public.opinions for insert with check (auth.uid() = user_id);
+drop policy if exists assignments_select_own on public.opinion_assignments;
+create policy assignments_select_own on public.opinion_assignments for select using (auth.uid() = viewer_user_id);
+drop policy if exists votes_select_own on public.opinion_votes;
+create policy votes_select_own on public.opinion_votes for select using (auth.uid() = voter_user_id);
+drop policy if exists votes_insert_own on public.opinion_votes;
+create policy votes_insert_own on public.opinion_votes for insert with check (auth.uid() = voter_user_id);
+drop policy if exists holdings_select_own on public.holdings;
+create policy holdings_select_own on public.holdings for select using (auth.uid() = user_id);
+drop policy if exists orders_select_own on public.orders;
+create policy orders_select_own on public.orders for select using (auth.uid() = user_id);
+drop policy if exists orders_insert_own on public.orders;
+create policy orders_insert_own on public.orders for insert with check (auth.uid() = user_id);
+drop policy if exists ledger_select_own on public.wallet_ledger;
+create policy ledger_select_own on public.wallet_ledger for select using (auth.uid() = user_id);
+drop policy if exists metrics_select_own on public.daily_user_metrics;
+create policy metrics_select_own on public.daily_user_metrics for select using (auth.uid() = user_id);
 
 -- Public read for market and winners/leaderboard inputs.
 alter table public.players enable row level security;
@@ -248,7 +284,10 @@ alter table public.daily_winners enable row level security;
 alter table public.daily_player_snapshots enable row level security;
 alter table public.system_jobs enable row level security;
 
-create policy if not exists players_public_read on public.players for select using (true);
-create policy if not exists winners_public_read on public.daily_winners for select using (true);
-create policy if not exists snapshots_public_read on public.daily_player_snapshots for select using (true);
+drop policy if exists players_public_read on public.players;
+create policy players_public_read on public.players for select using (true);
+drop policy if exists winners_public_read on public.daily_winners;
+create policy winners_public_read on public.daily_winners for select using (true);
+drop policy if exists snapshots_public_read on public.daily_player_snapshots;
+create policy snapshots_public_read on public.daily_player_snapshots for select using (true);
 
