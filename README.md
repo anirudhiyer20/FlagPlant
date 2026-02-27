@@ -95,6 +95,57 @@ Next we will implement:
 3. Daily opinion submission UI
 4. Admin dashboard (price override, job trigger, diagnostics)
 
+## 9) Phase 2 local app (now added)
+
+A starter Next.js app now exists in `web/` with:
+
+- Home page (`/`)
+- Auth page (`/auth`) for signup/login
+- Players page (`/players`) reading from Supabase `public.players`
+
+### A) Install dependencies
+
+From project root:
+
+```bash
+cd web
+npm install
+```
+
+### B) Add env file
+
+In `web/`, create `.env.local` from the template:
+
+```bash
+copy .env.local.example .env.local
+```
+
+Then edit `.env.local` and set:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
+
+Do not put `service_role` key in browser/client code.
+
+### C) Start the app
+
+```bash
+npm run dev
+```
+
+Open http://localhost:3000
+
+### D) Smoke test
+
+1. Open `/auth` and sign up a brand-new user.
+2. In Supabase Table Editor, confirm:
+   - one row in `public.profiles`
+   - one row in `public.wallets`
+   - `wallets.liquid_flags = 100`
+3. Open `/players` and confirm list loads (50 players).
+
 ---
 
 ## Notes for beta safety messaging
