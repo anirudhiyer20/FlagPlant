@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
+import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { formatFlagAmount } from "@/lib/format";
 
 type WinnerRow = {
   rank: number;
@@ -25,6 +25,51 @@ type PublishedRow = {
 
 type RoleRow = {
   role: "user" | "admin";
+};
+
+type PendingOrderSummaryRow = {
+  user_id: string;
+  username: string;
+  pending_order_count: number;
+  pending_flags_total: number;
+};
+
+type OrderExecutionRow = {
+  order_id: string;
+  user_id: string;
+  player_id: string;
+  status: "pending" | "executed" | "cancelled" | "failed";
+  flags_amount: number;
+  units_amount: number | null;
+  note: string;
+};
+
+type PendingOrderSummaryRawRow = {
+  result_user_id?: string;
+  result_username?: string;
+  result_pending_order_count?: number;
+  result_pending_flags_total?: number;
+  user_id?: string;
+  username?: string;
+  pending_order_count?: number;
+  pending_flags_total?: number;
+};
+
+type OrderExecutionRawRow = {
+  result_order_id?: string;
+  result_user_id?: string;
+  result_player_id?: string;
+  result_status?: "pending" | "executed" | "cancelled" | "failed";
+  result_flags_amount?: number;
+  result_units_amount?: number | null;
+  result_note?: string;
+  order_id?: string;
+  user_id?: string;
+  player_id?: string;
+  status?: "pending" | "executed" | "cancelled" | "failed";
+  flags_amount?: number;
+  units_amount?: number | null;
+  note?: string;
 };
 
 function todayString(): string {
@@ -63,8 +108,13 @@ function AdminPanel({ userId }: { userId: string }) {
   const [loadingRole, setLoadingRole] = useState(true);
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [executingOrders, setExecutingOrders] = useState(false);
   const [previewRows, setPreviewRows] = useState<WinnerRow[]>([]);
   const [publishedRows, setPublishedRows] = useState<PublishedRow[]>([]);
+  const [pendingOrderSummaryRows, setPendingOrderSummaryRows] = useState<
+    PendingOrderSummaryRow[]
+  >([]);
+  const [executionRows, setExecutionRows] = useState<OrderExecutionRow[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -134,6 +184,71 @@ function AdminPanel({ userId }: { userId: string }) {
     setLoading(false);
   }
 
+  async function loadPendingBuySummary() {
+    const { data, error: summaryError } = await supabase.rpc(
+      "admin_preview_pending_buy_orders",
+      { target_date: selectedDate }
+    );
+
+    if (summaryError) {
+      setError(summaryError.message);
+      setPendingOrderSummaryRows([]);
+      return;
+    }
+
+    const mapped = ((data ?? []) as PendingOrderSummaryRawRow[])
+      .map((row) => ({
+        user_id: row.result_user_id ?? row.user_id ?? "",
+        username: row.result_username ?? row.username ?? "",
+        pending_order_count:
+          row.result_pending_order_count ?? row.pending_order_count ?? 0,
+        pending_flags_total:
+          row.result_pending_flags_total ?? row.pending_flags_total ?? 0
+      }))
+      .filter((row) => row.user_id.length > 0);
+
+    setPendingOrderSummaryRows(mapped);
+  }
+
+  async function executePendingBuyOrders() {
+    setExecutingOrders(true);
+    setMessage("");
+    setError("");
+
+    const { data, error: executeError } = await supabase.rpc(
+      "admin_execute_pending_buy_orders",
+      { target_date: selectedDate }
+    );
+
+    if (executeError) {
+      setError(executeError.message);
+      setExecutingOrders(false);
+      await loadPendingBuySummary();
+      return;
+    }
+
+    const rows = ((data ?? []) as OrderExecutionRawRow[]).map((row) => ({
+      order_id: row.result_order_id ?? row.order_id ?? "",
+      user_id: row.result_user_id ?? row.user_id ?? "",
+      player_id: row.result_player_id ?? row.player_id ?? "",
+      status: row.result_status ?? row.status ?? "failed",
+      flags_amount: row.result_flags_amount ?? row.flags_amount ?? 0,
+      units_amount:
+        row.result_units_amount !== undefined
+          ? row.result_units_amount
+          : (row.units_amount ?? null),
+      note: row.result_note ?? row.note ?? ""
+    }));
+    setExecutionRows(rows);
+    const executedCount = rows.filter((row) => row.status === "executed").length;
+    const failedCount = rows.filter((row) => row.status === "failed").length;
+    setMessage(
+      `Order execution complete. Executed: ${executedCount}. Failed: ${failedCount}.`
+    );
+    await loadPendingBuySummary();
+    setExecutingOrders(false);
+  }
+
   async function publishWinners() {
     setPublishing(true);
     setMessage("");
@@ -193,7 +308,7 @@ function AdminPanel({ userId }: { userId: string }) {
           type="button"
           className="secondary"
           onClick={publishWinners}
-          disabled={publishing || loading}
+          disabled={publishing || loading || executingOrders}
         >
           {publishing ? "Publishing..." : "Publish Winners"}
         </button>
@@ -253,6 +368,80 @@ function AdminPanel({ userId }: { userId: string }) {
           </tbody>
         </table>
       )}
+
+      <h2>Order Clearing (Buy Orders)</h2>
+      <div className="grid">
+        <button
+          type="button"
+          onClick={loadPendingBuySummary}
+          disabled={loading || publishing || executingOrders}
+        >
+          Preview Pending Buy Orders
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={executePendingBuyOrders}
+          disabled={loading || publishing || executingOrders}
+        >
+          {executingOrders ? "Executing..." : "Execute Pending Buy Orders"}
+        </button>
+      </div>
+
+      {pendingOrderSummaryRows.length === 0 ? (
+        <p className="muted">No pending buy-order summary loaded for selected date.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Pending Orders</th>
+              <th>Pending Flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pendingOrderSummaryRows.map((row) => (
+              <tr key={row.user_id}>
+                <td>{row.username}</td>
+                <td>{row.pending_order_count}</td>
+                <td>{formatFlagAmount(row.pending_flags_total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {executionRows.length > 0 ? (
+        <>
+          <h2>Latest Order Execution Result</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Status</th>
+                <th>Flags</th>
+                <th>Units</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {executionRows.map((row) => (
+                <tr key={row.order_id}>
+                  <td>{row.order_id}</td>
+                  <td>{row.status}</td>
+                  <td>{formatFlagAmount(row.flags_amount)}</td>
+                  <td>
+                    {row.units_amount === null
+                      ? "--"
+                      : formatTwoDecimals(row.units_amount)}
+                  </td>
+                  <td>{row.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : null}
     </div>
   );
 }

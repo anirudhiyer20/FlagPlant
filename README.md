@@ -115,6 +115,8 @@ RLS policy changes for voting reads.
 Also run `supabase/patch_admin_winners.sql` once to add admin winner RPC tools.
 Also run `supabase/patch_order_budget_policy.sql` once to enforce combined
 pending buy-order budget limits against wallet balance.
+Also run `supabase/patch_order_execution.sql` once to add admin order-clearing
+RPC tools (pending buy execution into holdings/wallet/ledger).
 
 ### A) Install dependencies
 
@@ -168,7 +170,9 @@ Open http://localhost:3000
 11. Refresh `/dashboard` and confirm latest winner result appears for rewarded users.
 12. Open `/players`, click a player, and create a buy order.
 13. Open `/orders` and confirm your new order appears with `pending` status.
-14. Refresh `/dashboard` and confirm holdings card loads (it may be empty until order execution logic is added).
+14. Open `/admin`, choose date, preview pending buy orders, then execute pending buys.
+15. Open `/orders` and confirm status changes to `executed` (or `failed` if invalid at execution).
+16. Refresh `/dashboard` and confirm holdings + wallet values update after execution.
 
 ---
 
