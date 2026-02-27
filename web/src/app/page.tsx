@@ -5,16 +5,16 @@ export default function HomePage() {
     <main>
       <h1>FlagPlant Phase 2 Starter</h1>
       <p className="muted">
-        Your Supabase database is live. This app now adds local auth and a live
-        players read from `public.players`.
+        Your Supabase database is live. This app now includes auth, protected
+        pages, a daily opinion submit flow, and a live players list.
       </p>
 
       <div className="card">
         <h2>Next Actions</h2>
         <ol>
-          <li>Open the auth page and create/sign in a user.</li>
-          <li>Open players page and confirm seeded prices render.</li>
-          <li>Check Supabase Table Editor for new profile and wallet rows.</li>
+          <li>Open auth and log in.</li>
+          <li>Open daily opinion and submit once for today.</li>
+          <li>Open players and confirm seeded prices render.</li>
         </ol>
       </div>
 
@@ -22,6 +22,9 @@ export default function HomePage() {
         <h2>Pages</h2>
         <p>
           <Link href="/auth">Go to Auth</Link>
+        </p>
+        <p>
+          <Link href="/opinion">Go to Daily Opinion</Link>
         </p>
         <p>
           <Link href="/players">Go to Players</Link>

@@ -42,11 +42,13 @@ a {
 }
 
 input,
+textarea,
 button {
   font: inherit;
 }
 
-input {
+input,
+textarea {
   width: 100%;
   border: 1px solid #cfd8e3;
   border-radius: 8px;

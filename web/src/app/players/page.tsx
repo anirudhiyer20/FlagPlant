@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import RequireAuth from "@/components/require-auth";
 
 type PlayerRow = {
   id: string;
@@ -12,6 +13,21 @@ type PlayerRow = {
 };
 
 export default function PlayersPage() {
+  return (
+    <main>
+      <h1>Players</h1>
+      <p>
+        <Link href="/">Back to Home</Link>
+      </p>
+      <p>
+        <Link href="/opinion">Go to Daily Opinion</Link>
+      </p>
+      <RequireAuth>{() => <PlayersTable />}</RequireAuth>
+    </main>
+  );
+}
+
+function PlayersTable() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,40 +61,33 @@ export default function PlayersPage() {
   }, [supabase]);
 
   return (
-    <main>
-      <h1>Players</h1>
-      <p>
-        <Link href="/">Back to Home</Link>
-      </p>
+    <div className="card">
+      {loading ? <p>Loading players...</p> : null}
+      {error ? <p className="error">{error}</p> : null}
 
-      <div className="card">
-        {loading ? <p>Loading players...</p> : null}
-        {error ? <p className="error">{error}</p> : null}
-
-        {!loading && !error ? (
-          <>
-            <p className="muted">Loaded players: {players.length}</p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Seed Price</th>
-                  <th>Current Price</th>
+      {!loading && !error ? (
+        <>
+          <p className="muted">Loaded players: {players.length}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Seed Price</th>
+                <th>Current Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {players.map((player) => (
+                <tr key={player.id}>
+                  <td>{player.name}</td>
+                  <td>{player.seed_price}</td>
+                  <td>{player.current_price}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {players.map((player) => (
-                  <tr key={player.id}>
-                    <td>{player.name}</td>
-                    <td>{player.seed_price}</td>
-                    <td>{player.current_price}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        ) : null}
-      </div>
-    </main>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : null}
+    </div>
   );
 }

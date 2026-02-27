@@ -76,6 +76,12 @@ export default function AuthPage() {
       <p>
         <Link href="/">Back to Home</Link>
       </p>
+      <p>
+        <Link href="/opinion">Go to Daily Opinion</Link>
+      </p>
+      <p>
+        <Link href="/players">Go to Players</Link>
+      </p>
 
       <div className="card">
         <h2>{mode === "signup" ? "Create account" : "Sign in"}</h2>
