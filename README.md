@@ -110,6 +110,7 @@ A starter Next.js app now exists in `web/` with:
 - Orders page (`/orders`) for personal order history
 - Leaderboard page (`/leaderboard`) for ranked net worth snapshots
 - Public profile page (`/profiles/[id]`) with limited portfolio + winner visibility
+- Winner history page (`/winners`) for previous daily top-5 boards
 
 If you already set up Supabase before this update, run
 `supabase/patch_vote_policy.sql` once in Supabase SQL Editor to apply the latest
@@ -125,6 +126,8 @@ Also run `supabase/patch_player_market_stats.sql` once to add player card market
 stats RPC (`holders` and `invested capital`).
 Also run `supabase/patch_leaderboard.sql` once to add leaderboard snapshot RPC.
 Also run `supabase/patch_public_profiles.sql` once to add public profile view RPCs.
+Also run `supabase/patch_winner_history.sql` once to add winner-history RPC.
+Also run `supabase/patch_portfolio_history.sql` once to add portfolio history RPC for charting.
 
 ### A) Install dependencies
 
@@ -185,6 +188,7 @@ Open http://localhost:3000
 18. Refresh `/dashboard` and confirm holdings + wallet values update after execution.
 19. Open `/leaderboard` and confirm users are ranked by total net worth.
 20. Click a leaderboard username and confirm `/profiles/[id]` shows only wallet, portfolio metrics, holdings, and latest winner + opinion.
+21. Open `/winners` and confirm prior top-5 boards show rank, name, opinion, and votes.
 
 ---
 

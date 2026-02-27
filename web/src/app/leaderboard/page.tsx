@@ -32,6 +32,9 @@ export default function LeaderboardPage() {
       <p>
         <Link href="/orders">Go to My Orders</Link>
       </p>
+      <p>
+        <Link href="/winners">Go to Winner History</Link>
+      </p>
       <RequireAuth>{(session) => <LeaderboardPanel userId={session.user.id} />}</RequireAuth>
     </main>
   );
@@ -95,9 +98,9 @@ function LeaderboardPanel({ userId }: { userId: string }) {
               <th>Rank</th>
               <th>User</th>
               <th>Net Worth</th>
-              <th>Liquid</th>
-              <th>Holdings Value</th>
-              <th>Holdings</th>
+              <th>Unplanted</th>
+              <th>FlagPlants Value</th>
+              <th>FlagPlants</th>
             </tr>
           </thead>
           <tbody>

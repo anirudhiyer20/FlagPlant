@@ -367,12 +367,12 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
         <p>Current price: {formatFlagAmount(player?.current_price)}</p>
         <p>Baseline capital: {formatFlagAmount(player?.baseline_capital)}</p>
         <p>Holders: {marketStats.holderCount}</p>
-        <p>Invested capital: {formatFlagAmount(marketStats.investedCapital)}</p>
+        <p>Planted capital: {formatFlagAmount(marketStats.investedCapital)}</p>
       </div>
 
       <div className="card">
         <h2>Your Position</h2>
-        <p>Liquid flags: {formatFlagAmount(wallet?.liquid_flags)}</p>
+        <p>Unplanted flags: {formatFlagAmount(wallet?.liquid_flags)}</p>
         <p>Pending buy flags: {formatFlagAmount(pendingBuyFlags)}</p>
         <p>Pending sell units: {formatTwoDecimals(pendingSellUnits)}</p>
         <p>

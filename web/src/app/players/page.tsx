@@ -121,7 +121,7 @@ function PlayersTable() {
                 <th>Seed Price</th>
                 <th>Current Price</th>
                 <th>Holders</th>
-                <th>Invested Capital</th>
+                <th>Planted Capital</th>
               </tr>
             </thead>
             <tbody>

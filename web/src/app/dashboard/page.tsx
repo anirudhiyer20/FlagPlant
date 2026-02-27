@@ -3,6 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
+import PortfolioHistoryChart, {
+  type PortfolioHistoryPoint
+} from "@/components/portfolio-history-chart";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 
@@ -26,6 +29,8 @@ type WinnerRow = {
   rank: number;
   reward_flags: number;
   votes_received: number;
+  opinion_id: string;
+  opinion_body: string | null;
 };
 
 type HoldingRawRow = {
@@ -59,6 +64,15 @@ type DashboardData = {
   votesCount: number;
   latestWinner: WinnerRow | null;
   holdings: HoldingViewRow[];
+  portfolioHistory: PortfolioHistoryPoint[];
+};
+
+type PortfolioHistoryRawRow = {
+  result_snap_date: string;
+  result_unplanted_flags_close: number;
+  result_planted_value_close: number;
+  result_total_value_close: number;
+  result_holdings_json: unknown;
 };
 
 function todayString(): string {
@@ -73,6 +87,32 @@ function formatSignedFlag(value: number): string {
   if (value > 0) return `+${formatFlagAmount(value)}`;
   if (value < 0) return `-${formatFlagAmount(Math.abs(value))}`;
   return formatFlagAmount(0);
+}
+
+function parseHistoryHoldings(raw: unknown): PortfolioHistoryPoint["holdings"] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      return {
+        player_name:
+          typeof row.player_name === "string" ? row.player_name : "Unknown",
+        units:
+          typeof row.units === "number"
+            ? row.units
+            : Number.parseFloat(String(row.units ?? 0)),
+        value:
+          typeof row.value === "number"
+            ? row.value
+            : Number.parseFloat(String(row.value ?? 0))
+      };
+    })
+    .filter(
+      (item): item is PortfolioHistoryPoint["holdings"][number] =>
+        item !== null && Number.isFinite(item.units) && Number.isFinite(item.value)
+    );
 }
 
 export default function DashboardPage() {
@@ -98,6 +138,9 @@ export default function DashboardPage() {
         <Link href="/leaderboard">Go to Leaderboard</Link>
       </p>
       <p>
+        <Link href="/winners">Go to Winner History</Link>
+      </p>
+      <p>
         <Link href="/admin">Go to Admin</Link>
       </p>
       <RequireAuth>{(session) => <DashboardPanel userId={session.user.id} />}</RequireAuth>
@@ -117,7 +160,8 @@ function DashboardPanel({ userId }: { userId: string }) {
     assignmentsCount: 0,
     votesCount: 0,
     latestWinner: null,
-    holdings: []
+    holdings: [],
+    portfolioHistory: []
   });
   const dashboardDate = useMemo(() => todayString(), []);
 
@@ -153,7 +197,7 @@ function DashboardPanel({ userId }: { userId: string }) {
       .eq("assigned_for_date", dashboardDate);
     const latestWinnerQuery = supabase
       .from("daily_winners")
-      .select("winner_date,rank,reward_flags,votes_received")
+      .select("winner_date,rank,reward_flags,votes_received,opinion_id")
       .eq("user_id", userId)
       .order("winner_date", { ascending: false })
       .limit(1)
@@ -163,6 +207,10 @@ function DashboardPanel({ userId }: { userId: string }) {
       .select("player_id,units,avg_cost_basis")
       .eq("user_id", userId)
       .gt("units", 0.005);
+    const portfolioHistoryQuery = supabase.rpc("get_user_portfolio_history", {
+      target_user_id: userId,
+      lookback_days: 30
+    });
 
     const [
       profileResult,
@@ -171,7 +219,8 @@ function DashboardPanel({ userId }: { userId: string }) {
       assignmentsResult,
       votesResult,
       latestWinnerResult,
-      holdingsResult
+      holdingsResult,
+      portfolioHistoryResult
     ] = await Promise.all([
       profileQuery,
       walletQuery,
@@ -179,7 +228,8 @@ function DashboardPanel({ userId }: { userId: string }) {
       assignmentsQuery,
       votesQuery,
       latestWinnerQuery,
-      holdingsQuery
+      holdingsQuery,
+      portfolioHistoryQuery
     ]);
 
     if (profileResult.error) {
@@ -224,6 +274,12 @@ function DashboardPanel({ userId }: { userId: string }) {
       setLoading(false);
       return;
     }
+    if (portfolioHistoryResult.error) {
+      setError(portfolioHistoryResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
 
     const holdingsRaw = (holdingsResult.data ?? []) as HoldingRawRow[];
     const playerIds = holdingsRaw.map((row) => row.player_id);
@@ -264,14 +320,52 @@ function DashboardPanel({ userId }: { userId: string }) {
       })
       .filter((row): row is HoldingViewRow => row !== null);
 
+    const historyRows = (portfolioHistoryResult.data ?? []) as PortfolioHistoryRawRow[];
+    const portfolioHistory = historyRows.map((row) => ({
+      snap_date: row.result_snap_date,
+      unplanted_close: row.result_unplanted_flags_close ?? 0,
+      planted_close: row.result_planted_value_close ?? 0,
+      total_close: row.result_total_value_close ?? 0,
+      holdings: parseHistoryHoldings(row.result_holdings_json)
+    }));
+
+    const latestWinnerRaw = (latestWinnerResult.data as Omit<
+      WinnerRow,
+      "opinion_body"
+    > | null) ?? null;
+    let latestWinner: WinnerRow | null = latestWinnerRaw
+      ? {
+          ...latestWinnerRaw,
+          opinion_body: null
+        }
+      : null;
+
+    if (latestWinnerRaw?.opinion_id) {
+      const { data: opinionBodyData } = await supabase
+        .from("opinions")
+        .select("body")
+        .eq("id", latestWinnerRaw.opinion_id)
+        .maybeSingle();
+      if (
+        opinionBodyData &&
+        typeof (opinionBodyData as { body?: unknown }).body === "string"
+      ) {
+        latestWinner = {
+          ...latestWinnerRaw,
+          opinion_body: (opinionBodyData as { body: string }).body
+        };
+      }
+    }
+
     setData({
       profile: (profileResult.data as ProfileRow | null) ?? null,
       wallet: (walletResult.data as WalletRow | null) ?? null,
       todayOpinion: (opinionResult.data as OpinionRow | null) ?? null,
       assignmentsCount: assignmentsResult.count ?? 0,
       votesCount: votesResult.count ?? 0,
-      latestWinner: (latestWinnerResult.data as WinnerRow | null) ?? null,
-      holdings
+      latestWinner,
+      holdings,
+      portfolioHistory
     });
 
     setBusy(false);
@@ -305,11 +399,11 @@ function DashboardPanel({ userId }: { userId: string }) {
     data.wallet?.liquid_flags === undefined
       ? null
       : data.wallet.liquid_flags + totalHoldingsMarketValue;
-  const liquidSharePct =
+  const unplantedSharePct =
     totalNetWorth !== null && totalNetWorth > 0 && data.wallet
       ? (data.wallet.liquid_flags / totalNetWorth) * 100
       : null;
-  const investedSharePct =
+  const plantedSharePct =
     totalNetWorth !== null && totalNetWorth > 0
       ? (totalHoldingsMarketValue / totalNetWorth) * 100
       : null;
@@ -348,11 +442,11 @@ function DashboardPanel({ userId }: { userId: string }) {
           <div className="card">
             <h2>Wallet</h2>
             <p>
-              Liquid flags:{" "}
+              Unplanted flags:{" "}
               <strong>{formatFlagAmount(data.wallet?.liquid_flags)}</strong>
             </p>
             <p>
-              Holdings market value:{" "}
+              FlagPlants value:{" "}
               <strong>{formatFlagAmount(totalHoldingsMarketValue)}</strong>
             </p>
             <p>
@@ -363,7 +457,7 @@ function DashboardPanel({ userId }: { userId: string }) {
           <div className="card">
             <h2>Portfolio Metrics</h2>
             <p>
-              Holdings cost basis:{" "}
+              FlagPlants cost basis:{" "}
               <strong>{formatFlagAmount(totalHoldingsCostBasis)}</strong>
             </p>
             <p>
@@ -379,27 +473,28 @@ function DashboardPanel({ userId }: { userId: string }) {
               </strong>
             </p>
             <p>
-              Allocation (Liquid / Invested):{" "}
+              Allocation (Unplanted / Planted):{" "}
               <strong>
-                {liquidSharePct === null || investedSharePct === null
+                {unplantedSharePct === null || plantedSharePct === null
                   ? "--"
-                  : `${formatTwoDecimals(liquidSharePct)}% / ${formatTwoDecimals(investedSharePct)}%`}
+                  : `${formatTwoDecimals(unplantedSharePct)}% / ${formatTwoDecimals(plantedSharePct)}%`}
               </strong>
             </p>
             <p>
-              Top holding by value:{" "}
+              Top FlagPlant by value:{" "}
               <strong>
                 {topHolding
                   ? `${topHolding.player_name} (${formatFlagAmount(topHolding.market_value)})`
                   : "--"}
               </strong>
             </p>
+            <PortfolioHistoryChart points={data.portfolioHistory} />
           </div>
 
           <div className="card">
-            <h2>Holdings</h2>
+            <h2>FlagPlants</h2>
             {data.holdings.length === 0 ? (
-              <p className="muted">No holdings yet.</p>
+              <p className="muted">No FlagPlants yet.</p>
             ) : (
               <table>
                 <thead>
@@ -464,6 +559,8 @@ function DashboardPanel({ userId }: { userId: string }) {
                 <p>
                   Reward flags: {formatFlagAmount(data.latestWinner.reward_flags)}
                 </p>
+                <p>Winning opinion:</p>
+                <p>{data.latestWinner.opinion_body ?? "--"}</p>
               </>
             ) : (
               <p className="muted">No winner result yet for this account.</p>
