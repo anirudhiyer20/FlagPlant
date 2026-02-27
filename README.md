@@ -103,11 +103,13 @@ A starter Next.js app now exists in `web/` with:
 - Auth page (`/auth`) for signup/login
 - Daily opinion page (`/opinion`) with one submission per user/day
 - Vote page (`/vote`) for assigned-opinion voting
+- Admin page (`/admin`) for winner preview/publish (admin users only)
 - Players page (`/players`) reading from Supabase `public.players`
 
 If you already set up Supabase before this update, run
 `supabase/patch_vote_policy.sql` once in Supabase SQL Editor to apply the latest
 RLS policy changes for voting reads.
+Also run `supabase/patch_admin_winners.sql` once to add admin winner RPC tools.
 
 ### A) Install dependencies
 
@@ -155,7 +157,9 @@ Open http://localhost:3000
 5. Open `/vote` for one of those users and cast a vote.
 6. Confirm one row appears in `public.opinion_votes`.
 7. Try voting the same opinion again and confirm it is blocked.
-8. Open `/players` and confirm list loads (50 players).
+8. Open `/admin` as your admin account, preview winners, then publish winners.
+9. Confirm rows appear in `public.daily_winners` and reward entries in `public.wallet_ledger`.
+10. Open `/players` and confirm list loads (50 players).
 
 ---
 
