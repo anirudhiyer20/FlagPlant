@@ -21,6 +21,7 @@ export default function HomePage() {
           <li>Open players, open a player detail, and create a buy order.</li>
           <li>Open My Orders and confirm order history appears.</li>
           <li>Open admin and run order clearing + repricing.</li>
+          <li>Open leaderboard and compare net worth rankings.</li>
         </ol>
       </div>
 
@@ -46,6 +47,9 @@ export default function HomePage() {
         </p>
         <p>
           <Link href="/orders">Go to My Orders</Link>
+        </p>
+        <p>
+          <Link href="/leaderboard">Go to Leaderboard</Link>
         </p>
       </div>
     </main>

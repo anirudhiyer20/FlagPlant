@@ -38,7 +38,10 @@ begin
       coalesce(
         sum(
           case
-            when o.order_type = 'sell' then coalesce(o.units_amount, 0::numeric) * p.current_price
+            when o.order_type = 'sell' then coalesce(
+              o.flags_amount,
+              coalesce(o.units_amount, 0::numeric) * p.current_price
+            )
             else 0::numeric
           end
         ),

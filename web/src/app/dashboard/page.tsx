@@ -46,7 +46,9 @@ type HoldingViewRow = {
   units: number;
   avg_cost_basis: number;
   current_price: number;
+  cost_basis_value: number;
   market_value: number;
+  unrealized_pnl: number;
 };
 
 type DashboardData = {
@@ -67,6 +69,12 @@ function todayString(): string {
   return `${y}-${m}-${d}`;
 }
 
+function formatSignedFlag(value: number): string {
+  if (value > 0) return `+${formatFlagAmount(value)}`;
+  if (value < 0) return `-${formatFlagAmount(Math.abs(value))}`;
+  return formatFlagAmount(0);
+}
+
 export default function DashboardPage() {
   return (
     <main>
@@ -85,6 +93,9 @@ export default function DashboardPage() {
       </p>
       <p>
         <Link href="/orders">Go to My Orders</Link>
+      </p>
+      <p>
+        <Link href="/leaderboard">Go to Leaderboard</Link>
       </p>
       <p>
         <Link href="/admin">Go to Admin</Link>
@@ -150,7 +161,8 @@ function DashboardPanel({ userId }: { userId: string }) {
     const holdingsQuery = supabase
       .from("holdings")
       .select("player_id,units,avg_cost_basis")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .gt("units", 0.005);
 
     const [
       profileResult,
@@ -245,7 +257,9 @@ function DashboardPanel({ userId }: { userId: string }) {
           units: row.units,
           avg_cost_basis: row.avg_cost_basis,
           current_price: player.current_price,
-          market_value: row.units * player.current_price
+          cost_basis_value: row.units * row.avg_cost_basis,
+          market_value: row.units * player.current_price,
+          unrealized_pnl: row.units * (player.current_price - row.avg_cost_basis)
         } as HoldingViewRow;
       })
       .filter((row): row is HoldingViewRow => row !== null);
@@ -278,10 +292,34 @@ function DashboardPanel({ userId }: { userId: string }) {
     (sum, holding) => sum + holding.market_value,
     0
   );
+  const totalHoldingsCostBasis = data.holdings.reduce(
+    (sum, holding) => sum + holding.cost_basis_value,
+    0
+  );
+  const totalUnrealizedPnl = totalHoldingsMarketValue - totalHoldingsCostBasis;
+  const totalUnrealizedPnlPct =
+    totalHoldingsCostBasis > 0
+      ? (totalUnrealizedPnl / totalHoldingsCostBasis) * 100
+      : null;
   const totalNetWorth =
     data.wallet?.liquid_flags === undefined
       ? null
       : data.wallet.liquid_flags + totalHoldingsMarketValue;
+  const liquidSharePct =
+    totalNetWorth !== null && totalNetWorth > 0 && data.wallet
+      ? (data.wallet.liquid_flags / totalNetWorth) * 100
+      : null;
+  const investedSharePct =
+    totalNetWorth !== null && totalNetWorth > 0
+      ? (totalHoldingsMarketValue / totalNetWorth) * 100
+      : null;
+  const topHolding = data.holdings.reduce<HoldingViewRow | null>(
+    (best, holding) => {
+      if (!best) return holding;
+      return holding.market_value > best.market_value ? holding : best;
+    },
+    null
+  );
 
   return (
     <div className="grid">
@@ -323,6 +361,42 @@ function DashboardPanel({ userId }: { userId: string }) {
           </div>
 
           <div className="card">
+            <h2>Portfolio Metrics</h2>
+            <p>
+              Holdings cost basis:{" "}
+              <strong>{formatFlagAmount(totalHoldingsCostBasis)}</strong>
+            </p>
+            <p>
+              Unrealized P/L:{" "}
+              <strong>{formatSignedFlag(totalUnrealizedPnl)}</strong>
+            </p>
+            <p>
+              Unrealized return:{" "}
+              <strong>
+                {totalUnrealizedPnlPct === null
+                  ? "--"
+                  : `${formatTwoDecimals(totalUnrealizedPnlPct)}%`}
+              </strong>
+            </p>
+            <p>
+              Allocation (Liquid / Invested):{" "}
+              <strong>
+                {liquidSharePct === null || investedSharePct === null
+                  ? "--"
+                  : `${formatTwoDecimals(liquidSharePct)}% / ${formatTwoDecimals(investedSharePct)}%`}
+              </strong>
+            </p>
+            <p>
+              Top holding by value:{" "}
+              <strong>
+                {topHolding
+                  ? `${topHolding.player_name} (${formatFlagAmount(topHolding.market_value)})`
+                  : "--"}
+              </strong>
+            </p>
+          </div>
+
+          <div className="card">
             <h2>Holdings</h2>
             {data.holdings.length === 0 ? (
               <p className="muted">No holdings yet.</p>
@@ -334,7 +408,9 @@ function DashboardPanel({ userId }: { userId: string }) {
                     <th>Units</th>
                     <th>Avg Cost</th>
                     <th>Current Price</th>
+                    <th>Cost Basis</th>
                     <th>Market Value</th>
+                    <th>Unrealized P/L</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -344,7 +420,9 @@ function DashboardPanel({ userId }: { userId: string }) {
                       <td>{formatTwoDecimals(holding.units)}</td>
                       <td>{formatFlagAmount(holding.avg_cost_basis)}</td>
                       <td>{formatFlagAmount(holding.current_price)}</td>
+                      <td>{formatFlagAmount(holding.cost_basis_value)}</td>
                       <td>{formatFlagAmount(holding.market_value)}</td>
+                      <td>{formatSignedFlag(holding.unrealized_pnl)}</td>
                     </tr>
                   ))}
                 </tbody>

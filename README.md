@@ -106,8 +106,10 @@ A starter Next.js app now exists in `web/` with:
 - Vote page (`/vote`) for assigned-opinion voting
 - Admin page (`/admin`) for winner preview/publish (admin users only)
 - Players page (`/players`) reading from Supabase `public.players`
-- Player detail page (`/players/[id]`) with buy-order form
+- Player detail page (`/players/[id]`) with buy/sell order forms
 - Orders page (`/orders`) for personal order history
+- Leaderboard page (`/leaderboard`) for ranked net worth snapshots
+- Public profile page (`/profiles/[id]`) with limited portfolio + winner visibility
 
 If you already set up Supabase before this update, run
 `supabase/patch_vote_policy.sql` once in Supabase SQL Editor to apply the latest
@@ -116,11 +118,13 @@ Also run `supabase/patch_admin_winners.sql` once to add admin winner RPC tools.
 Also run `supabase/patch_order_budget_policy.sql` once to enforce combined
 pending buy-order budget limits against wallet balance.
 Also run `supabase/patch_order_execution.sql` once to add admin order-clearing
-RPC tools (pending buy execution into holdings/wallet/ledger).
+RPC tools (pending buy/sell execution into holdings/wallet/ledger).
 Also run `supabase/patch_repricing.sql` once to add admin repricing preview/apply
 RPC tools (price updates based on executed order flow).
 Also run `supabase/patch_player_market_stats.sql` once to add player card market
 stats RPC (`holders` and `invested capital`).
+Also run `supabase/patch_leaderboard.sql` once to add leaderboard snapshot RPC.
+Also run `supabase/patch_public_profiles.sql` once to add public profile view RPCs.
 
 ### A) Install dependencies
 
@@ -174,11 +178,13 @@ Open http://localhost:3000
 11. Refresh `/dashboard` and confirm latest winner result appears for rewarded users.
 12. Open `/players`, click a player, and create a buy order.
 13. Open `/orders` and confirm your new order appears with `pending` status.
-14. Open `/admin`, choose date, preview pending buy orders, then execute pending buys.
+14. Open `/admin`, choose date, preview pending buy/sell orders, then execute pending orders.
 15. Open `/orders` and confirm status changes to `executed` (or `failed` if invalid at execution).
 16. In `/admin`, preview repricing then apply repricing for the same date.
 17. Refresh `/players` and confirm player prices updated.
 18. Refresh `/dashboard` and confirm holdings + wallet values update after execution.
+19. Open `/leaderboard` and confirm users are ranked by total net worth.
+20. Click a leaderboard username and confirm `/profiles/[id]` shows only wallet, portfolio metrics, holdings, and latest winner + opinion.
 
 ---
 

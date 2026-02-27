@@ -34,12 +34,20 @@ type PendingOrderSummaryRow = {
   pending_flags_total: number;
 };
 
+type PendingSellSummaryRow = {
+  user_id: string;
+  username: string;
+  pending_order_count: number;
+  pending_units_total: number;
+  estimated_flags_total: number;
+};
+
 type OrderExecutionRow = {
   order_id: string;
   user_id: string;
   player_id: string;
   status: "pending" | "executed" | "cancelled" | "failed";
-  flags_amount: number;
+  flags_amount: number | null;
   units_amount: number | null;
   note: string;
 };
@@ -49,10 +57,14 @@ type PendingOrderSummaryRawRow = {
   result_username?: string;
   result_pending_order_count?: number;
   result_pending_flags_total?: number;
+  result_pending_units_total?: number;
+  result_estimated_flags_total?: number;
   user_id?: string;
   username?: string;
   pending_order_count?: number;
   pending_flags_total?: number;
+  pending_units_total?: number;
+  estimated_flags_total?: number;
 };
 
 type OrderExecutionRawRow = {
@@ -60,14 +72,14 @@ type OrderExecutionRawRow = {
   result_user_id?: string;
   result_player_id?: string;
   result_status?: "pending" | "executed" | "cancelled" | "failed";
-  result_flags_amount?: number;
+  result_flags_amount?: number | null;
   result_units_amount?: number | null;
   result_note?: string;
   order_id?: string;
   user_id?: string;
   player_id?: string;
   status?: "pending" | "executed" | "cancelled" | "failed";
-  flags_amount?: number;
+  flags_amount?: number | null;
   units_amount?: number | null;
   note?: string;
 };
@@ -120,13 +132,18 @@ function AdminPanel({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [executingOrders, setExecutingOrders] = useState(false);
+  const [executingSellOrders, setExecutingSellOrders] = useState(false);
   const [repricingBusy, setRepricingBusy] = useState(false);
   const [previewRows, setPreviewRows] = useState<WinnerRow[]>([]);
   const [publishedRows, setPublishedRows] = useState<PublishedRow[]>([]);
   const [pendingOrderSummaryRows, setPendingOrderSummaryRows] = useState<
     PendingOrderSummaryRow[]
   >([]);
-  const [executionRows, setExecutionRows] = useState<OrderExecutionRow[]>([]);
+  const [pendingSellSummaryRows, setPendingSellSummaryRows] = useState<
+    PendingSellSummaryRow[]
+  >([]);
+  const [buyExecutionRows, setBuyExecutionRows] = useState<OrderExecutionRow[]>([]);
+  const [sellExecutionRows, setSellExecutionRows] = useState<OrderExecutionRow[]>([]);
   const [repricingRows, setRepricingRows] = useState<RepricingRow[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -245,21 +262,94 @@ function AdminPanel({ userId }: { userId: string }) {
       user_id: row.result_user_id ?? row.user_id ?? "",
       player_id: row.result_player_id ?? row.player_id ?? "",
       status: row.result_status ?? row.status ?? "failed",
-      flags_amount: row.result_flags_amount ?? row.flags_amount ?? 0,
+      flags_amount:
+        row.result_flags_amount !== undefined
+          ? row.result_flags_amount
+          : (row.flags_amount ?? null),
       units_amount:
         row.result_units_amount !== undefined
           ? row.result_units_amount
           : (row.units_amount ?? null),
       note: row.result_note ?? row.note ?? ""
     }));
-    setExecutionRows(rows);
+    setBuyExecutionRows(rows);
     const executedCount = rows.filter((row) => row.status === "executed").length;
     const failedCount = rows.filter((row) => row.status === "failed").length;
     setMessage(
-      `Order execution complete. Executed: ${executedCount}. Failed: ${failedCount}.`
+      `Buy order execution complete. Executed: ${executedCount}. Failed: ${failedCount}.`
     );
     await loadPendingBuySummary();
     setExecutingOrders(false);
+  }
+
+  async function loadPendingSellSummary() {
+    const { data, error: summaryError } = await supabase.rpc(
+      "admin_preview_pending_sell_orders",
+      { target_date: selectedDate }
+    );
+
+    if (summaryError) {
+      setError(summaryError.message);
+      setPendingSellSummaryRows([]);
+      return;
+    }
+
+    const mapped = ((data ?? []) as PendingOrderSummaryRawRow[])
+      .map((row) => ({
+        user_id: row.result_user_id ?? row.user_id ?? "",
+        username: row.result_username ?? row.username ?? "",
+        pending_order_count:
+          row.result_pending_order_count ?? row.pending_order_count ?? 0,
+        pending_units_total:
+          row.result_pending_units_total ?? row.pending_units_total ?? 0,
+        estimated_flags_total:
+          row.result_estimated_flags_total ?? row.estimated_flags_total ?? 0
+      }))
+      .filter((row) => row.user_id.length > 0);
+
+    setPendingSellSummaryRows(mapped);
+  }
+
+  async function executePendingSellOrders() {
+    setExecutingSellOrders(true);
+    setMessage("");
+    setError("");
+
+    const { data, error: executeError } = await supabase.rpc(
+      "admin_execute_pending_sell_orders",
+      { target_date: selectedDate }
+    );
+
+    if (executeError) {
+      setError(executeError.message);
+      setExecutingSellOrders(false);
+      await loadPendingSellSummary();
+      return;
+    }
+
+    const rows = ((data ?? []) as OrderExecutionRawRow[]).map((row) => ({
+      order_id: row.result_order_id ?? row.order_id ?? "",
+      user_id: row.result_user_id ?? row.user_id ?? "",
+      player_id: row.result_player_id ?? row.player_id ?? "",
+      status: row.result_status ?? row.status ?? "failed",
+      flags_amount:
+        row.result_flags_amount !== undefined
+          ? row.result_flags_amount
+          : (row.flags_amount ?? null),
+      units_amount:
+        row.result_units_amount !== undefined
+          ? row.result_units_amount
+          : (row.units_amount ?? null),
+      note: row.result_note ?? row.note ?? ""
+    }));
+    setSellExecutionRows(rows);
+    const executedCount = rows.filter((row) => row.status === "executed").length;
+    const failedCount = rows.filter((row) => row.status === "failed").length;
+    setMessage(
+      `Sell order execution complete. Executed: ${executedCount}. Failed: ${failedCount}.`
+    );
+    await loadPendingSellSummary();
+    setExecutingSellOrders(false);
   }
 
   async function previewRepricing() {
@@ -364,7 +454,13 @@ function AdminPanel({ userId }: { userId: string }) {
           type="button"
           className="secondary"
           onClick={publishWinners}
-          disabled={publishing || loading || executingOrders || repricingBusy}
+          disabled={
+            publishing ||
+            loading ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy
+          }
         >
           {publishing ? "Publishing..." : "Publish Winners"}
         </button>
@@ -425,12 +521,18 @@ function AdminPanel({ userId }: { userId: string }) {
         </table>
       )}
 
-      <h2>Order Clearing (Buy Orders)</h2>
+      <h2>Order Clearing (Buy/Sell Orders)</h2>
       <div className="grid">
         <button
           type="button"
           onClick={loadPendingBuySummary}
-          disabled={loading || publishing || executingOrders || repricingBusy}
+          disabled={
+            loading ||
+            publishing ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy
+          }
         >
           Preview Pending Buy Orders
         </button>
@@ -438,7 +540,13 @@ function AdminPanel({ userId }: { userId: string }) {
           type="button"
           className="secondary"
           onClick={executePendingBuyOrders}
-          disabled={loading || publishing || executingOrders || repricingBusy}
+          disabled={
+            loading ||
+            publishing ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy
+          }
         >
           {executingOrders ? "Executing..." : "Execute Pending Buy Orders"}
         </button>
@@ -467,9 +575,9 @@ function AdminPanel({ userId }: { userId: string }) {
         </table>
       )}
 
-      {executionRows.length > 0 ? (
+      {buyExecutionRows.length > 0 ? (
         <>
-          <h2>Latest Order Execution Result</h2>
+          <h2>Latest Buy Execution Result</h2>
           <table>
             <thead>
               <tr>
@@ -481,11 +589,106 @@ function AdminPanel({ userId }: { userId: string }) {
               </tr>
             </thead>
             <tbody>
-              {executionRows.map((row) => (
+              {buyExecutionRows.map((row) => (
                 <tr key={row.order_id}>
                   <td>{row.order_id}</td>
                   <td>{row.status}</td>
-                  <td>{formatFlagAmount(row.flags_amount)}</td>
+                  <td>
+                    {row.flags_amount === null
+                      ? "--"
+                      : formatFlagAmount(row.flags_amount)}
+                  </td>
+                  <td>
+                    {row.units_amount === null
+                      ? "--"
+                      : formatTwoDecimals(row.units_amount)}
+                  </td>
+                  <td>{row.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      ) : null}
+
+      <div className="grid">
+        <button
+          type="button"
+          onClick={loadPendingSellSummary}
+          disabled={
+            loading ||
+            publishing ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy
+          }
+        >
+          Preview Pending Sell Orders
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={executePendingSellOrders}
+          disabled={
+            loading ||
+            publishing ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy
+          }
+        >
+          {executingSellOrders ? "Executing..." : "Execute Pending Sell Orders"}
+        </button>
+      </div>
+
+      {pendingSellSummaryRows.length === 0 ? (
+        <p className="muted">No pending sell-order summary loaded for selected date.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>User</th>
+              <th>Pending Orders</th>
+              <th>Pending Units</th>
+              <th>Estimated Flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pendingSellSummaryRows.map((row) => (
+              <tr key={row.user_id}>
+                <td>{row.username}</td>
+                <td>{row.pending_order_count}</td>
+                <td>{formatTwoDecimals(row.pending_units_total)}</td>
+                <td>{formatFlagAmount(row.estimated_flags_total)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {sellExecutionRows.length > 0 ? (
+        <>
+          <h2>Latest Sell Execution Result</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Status</th>
+                <th>Flags</th>
+                <th>Units</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sellExecutionRows.map((row) => (
+                <tr key={row.order_id}>
+                  <td>{row.order_id}</td>
+                  <td>{row.status}</td>
+                  <td>
+                    {row.flags_amount === null
+                      ? "--"
+                      : formatFlagAmount(row.flags_amount)}
+                  </td>
                   <td>
                     {row.units_amount === null
                       ? "--"
@@ -504,7 +707,13 @@ function AdminPanel({ userId }: { userId: string }) {
         <button
           type="button"
           onClick={previewRepricing}
-          disabled={loading || publishing || executingOrders || repricingBusy}
+          disabled={
+            loading ||
+            publishing ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy
+          }
         >
           {repricingBusy ? "Working..." : "Preview Repricing"}
         </button>
@@ -512,7 +721,13 @@ function AdminPanel({ userId }: { userId: string }) {
           type="button"
           className="secondary"
           onClick={applyRepricing}
-          disabled={loading || publishing || executingOrders || repricingBusy}
+          disabled={
+            loading ||
+            publishing ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy
+          }
         >
           {repricingBusy ? "Working..." : "Apply Repricing"}
         </button>
@@ -527,7 +742,7 @@ function AdminPanel({ userId }: { userId: string }) {
               <th>Player</th>
               <th>Pre</th>
               <th>Post</th>
-              <th>Flow</th>
+              <th>Net Flow</th>
               <th>Multiplier</th>
             </tr>
           </thead>

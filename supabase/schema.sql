@@ -140,7 +140,13 @@ create table if not exists public.orders (
     (
       order_type = 'sell'
       and units_amount is not null
-      and flags_amount is null
+      and (
+        (status = 'pending')
+        or
+        (status = 'executed' and flags_amount is not null)
+        or
+        (status in ('cancelled', 'failed'))
+      )
     )
   )
 );
@@ -305,8 +311,7 @@ for insert
 with check (
   auth.uid() = user_id
   and (
-    order_type = 'sell'
-    or (
+    (
       order_type = 'buy'
       and flags_amount is not null
       and flags_amount <= (
@@ -324,6 +329,33 @@ with check (
             from public.orders o
             where o.user_id = auth.uid()
               and o.order_type = 'buy'
+              and o.status = 'pending'
+          ),
+          0::numeric
+        )
+      )
+    )
+    or
+    (
+      order_type = 'sell'
+      and units_amount is not null
+      and units_amount <= (
+        coalesce(
+          (
+            select h.units
+            from public.holdings h
+            where h.user_id = auth.uid()
+              and h.player_id = orders.player_id
+          ),
+          0::numeric
+        )
+        - coalesce(
+          (
+            select sum(o.units_amount)
+            from public.orders o
+            where o.user_id = auth.uid()
+              and o.player_id = orders.player_id
+              and o.order_type = 'sell'
               and o.status = 'pending'
           ),
           0::numeric
@@ -369,7 +401,7 @@ begin
   from public.players p
   left join public.holdings h
     on h.player_id = p.id
-    and h.units > 0
+    and h.units > 0.005::numeric
   group by p.id
   order by p.id;
 end;
@@ -377,6 +409,233 @@ $$;
 
 revoke all on function public.get_player_market_stats() from public;
 grant execute on function public.get_player_market_stats() to authenticated;
+
+create or replace function public.get_leaderboard_snapshot()
+returns table (
+  result_rank int,
+  result_user_id uuid,
+  result_username text,
+  result_liquid_flags numeric(18,6),
+  result_holdings_value numeric(18,6),
+  result_net_worth numeric(18,6),
+  result_holding_count int
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  return query
+  with holdings_agg as (
+    select
+      h.user_id,
+      count(*)::int as holding_count,
+      coalesce(sum(h.units * p.current_price), 0::numeric)::numeric(18,6) as holdings_value
+    from public.holdings h
+    join public.players p on p.id = h.player_id
+    where h.units > 0.005::numeric
+    group by h.user_id
+  ),
+  base as (
+    select
+      pr.id as user_id,
+      pr.username,
+      coalesce(w.liquid_flags, 0::numeric)::numeric(18,6) as liquid_flags,
+      coalesce(ha.holdings_value, 0::numeric)::numeric(18,6) as holdings_value,
+      coalesce(ha.holding_count, 0)::int as holding_count,
+      (
+        coalesce(w.liquid_flags, 0::numeric)
+        + coalesce(ha.holdings_value, 0::numeric)
+      )::numeric(18,6) as net_worth
+    from public.profiles pr
+    left join public.wallets w on w.user_id = pr.id
+    left join holdings_agg ha on ha.user_id = pr.id
+  ),
+  ranked as (
+    select
+      dense_rank() over (
+        order by b.net_worth desc, b.username asc, b.user_id asc
+      )::int as rank,
+      b.user_id,
+      b.username,
+      b.liquid_flags,
+      b.holdings_value,
+      b.net_worth,
+      b.holding_count
+    from base b
+  )
+  select
+    r.rank as result_rank,
+    r.user_id as result_user_id,
+    r.username as result_username,
+    r.liquid_flags as result_liquid_flags,
+    r.holdings_value as result_holdings_value,
+    r.net_worth as result_net_worth,
+    r.holding_count as result_holding_count
+  from ranked r
+  order by r.rank asc, r.username asc;
+end;
+$$;
+
+revoke all on function public.get_leaderboard_snapshot() from public;
+grant execute on function public.get_leaderboard_snapshot() to authenticated;
+
+create or replace function public.get_public_profile_snapshot(target_user_id uuid)
+returns table (
+  result_user_id uuid,
+  result_username text,
+  result_liquid_flags numeric(18,6),
+  result_holdings_value numeric(18,6),
+  result_holdings_cost_basis numeric(18,6),
+  result_unrealized_pnl numeric(18,6),
+  result_unrealized_return_pct numeric(18,6),
+  result_net_worth numeric(18,6),
+  result_liquid_share_pct numeric(18,6),
+  result_invested_share_pct numeric(18,6),
+  result_holding_count int,
+  result_top_holding_player_name text,
+  result_top_holding_value numeric(18,6),
+  result_latest_winner_date date,
+  result_latest_winner_rank int,
+  result_latest_winner_votes int,
+  result_latest_winner_reward_flags numeric(18,6),
+  result_latest_winner_opinion text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  return query
+  with holdings_rows as (
+    select
+      h.player_id,
+      p.name as player_name,
+      h.units,
+      h.avg_cost_basis,
+      p.current_price,
+      (h.units * h.avg_cost_basis)::numeric(18,6) as cost_basis_value,
+      (h.units * p.current_price)::numeric(18,6) as market_value
+    from public.holdings h
+    join public.players p on p.id = h.player_id
+    where h.user_id = target_user_id
+      and h.units > 0.005::numeric
+  ),
+  holdings_agg as (
+    select
+      count(*)::int as holding_count,
+      coalesce(sum(hr.cost_basis_value), 0::numeric)::numeric(18,6) as holdings_cost_basis,
+      coalesce(sum(hr.market_value), 0::numeric)::numeric(18,6) as holdings_value
+    from holdings_rows hr
+  ),
+  top_holding as (
+    select
+      hr.player_name,
+      hr.market_value
+    from holdings_rows hr
+    order by hr.market_value desc, hr.player_name asc
+    limit 1
+  ),
+  latest_winner as (
+    select
+      dw.winner_date,
+      dw.rank,
+      dw.votes_received,
+      dw.reward_flags,
+      o.body as opinion_body
+    from public.daily_winners dw
+    left join public.opinions o on o.id = dw.opinion_id
+    where dw.user_id = target_user_id
+    order by dw.winner_date desc, dw.rank asc
+    limit 1
+  )
+  select
+    pr.id as result_user_id,
+    pr.username as result_username,
+    coalesce(w.liquid_flags, 0::numeric)::numeric(18,6) as result_liquid_flags,
+    ha.holdings_value as result_holdings_value,
+    ha.holdings_cost_basis as result_holdings_cost_basis,
+    (ha.holdings_value - ha.holdings_cost_basis)::numeric(18,6) as result_unrealized_pnl,
+    case
+      when ha.holdings_cost_basis > 0
+      then round(((ha.holdings_value - ha.holdings_cost_basis) / ha.holdings_cost_basis) * 100::numeric, 6)
+      else null::numeric(18,6)
+    end as result_unrealized_return_pct,
+    (coalesce(w.liquid_flags, 0::numeric) + ha.holdings_value)::numeric(18,6) as result_net_worth,
+    case
+      when (coalesce(w.liquid_flags, 0::numeric) + ha.holdings_value) > 0
+      then round((coalesce(w.liquid_flags, 0::numeric) / (coalesce(w.liquid_flags, 0::numeric) + ha.holdings_value)) * 100::numeric, 6)
+      else null::numeric(18,6)
+    end as result_liquid_share_pct,
+    case
+      when (coalesce(w.liquid_flags, 0::numeric) + ha.holdings_value) > 0
+      then round((ha.holdings_value / (coalesce(w.liquid_flags, 0::numeric) + ha.holdings_value)) * 100::numeric, 6)
+      else null::numeric(18,6)
+    end as result_invested_share_pct,
+    ha.holding_count as result_holding_count,
+    th.player_name as result_top_holding_player_name,
+    th.market_value as result_top_holding_value,
+    lw.winner_date as result_latest_winner_date,
+    lw.rank as result_latest_winner_rank,
+    lw.votes_received as result_latest_winner_votes,
+    lw.reward_flags as result_latest_winner_reward_flags,
+    lw.opinion_body as result_latest_winner_opinion
+  from public.profiles pr
+  left join public.wallets w on w.user_id = pr.id
+  cross join holdings_agg ha
+  left join top_holding th on true
+  left join latest_winner lw on true
+  where pr.id = target_user_id;
+end;
+$$;
+
+create or replace function public.get_public_profile_holdings(target_user_id uuid)
+returns table (
+  result_player_id uuid,
+  result_player_name text,
+  result_units numeric(24,10),
+  result_avg_cost_basis numeric(18,6),
+  result_current_price numeric(18,6),
+  result_cost_basis_value numeric(18,6),
+  result_market_value numeric(18,6),
+  result_unrealized_pnl numeric(18,6)
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Authentication required';
+  end if;
+
+  return query
+  select
+    h.player_id as result_player_id,
+    p.name as result_player_name,
+    h.units as result_units,
+    h.avg_cost_basis as result_avg_cost_basis,
+    p.current_price as result_current_price,
+    (h.units * h.avg_cost_basis)::numeric(18,6) as result_cost_basis_value,
+    (h.units * p.current_price)::numeric(18,6) as result_market_value,
+    (h.units * (p.current_price - h.avg_cost_basis))::numeric(18,6) as result_unrealized_pnl
+  from public.holdings h
+  join public.players p on p.id = h.player_id
+  where h.user_id = target_user_id
+    and h.units > 0.005::numeric
+  order by result_market_value desc, result_player_name asc;
+end;
+$$;
+
+revoke all on function public.get_public_profile_snapshot(uuid) from public;
+grant execute on function public.get_public_profile_snapshot(uuid) to authenticated;
+
+revoke all on function public.get_public_profile_holdings(uuid) from public;
+grant execute on function public.get_public_profile_holdings(uuid) to authenticated;
 
 -- ===== Admin winner compute/publish RPC =====
 create or replace function public.assert_admin()
@@ -611,6 +870,39 @@ begin
 end;
 $$;
 
+create or replace function public.admin_preview_pending_sell_orders(target_date date default current_date)
+returns table (
+  result_user_id uuid,
+  result_username text,
+  result_pending_order_count int,
+  result_pending_units_total numeric(24,10),
+  result_estimated_flags_total numeric(18,6)
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.assert_admin();
+
+  return query
+  select
+    o.user_id,
+    p.username,
+    count(*)::int as pending_order_count,
+    coalesce(sum(o.units_amount), 0::numeric(24,10)) as pending_units_total,
+    coalesce(sum(o.units_amount * pl.current_price), 0::numeric(18,6)) as estimated_flags_total
+  from public.orders o
+  join public.profiles p on p.id = o.user_id
+  join public.players pl on pl.id = o.player_id
+  where o.trade_date = target_date
+    and o.order_type = 'sell'
+    and o.status = 'pending'
+  group by o.user_id, p.username
+  order by estimated_flags_total desc, pending_order_count desc;
+end;
+$$;
+
 create or replace function public.admin_execute_pending_buy_orders(target_date date default current_date)
 returns table (
   result_order_id uuid,
@@ -646,6 +938,7 @@ begin
       and o.order_type = 'buy'
       and o.status = 'pending'
     order by o.created_at asc, o.id asc
+    for update skip locked
   loop
     select w.liquid_flags
     into v_wallet
@@ -806,11 +1099,213 @@ begin
 end;
 $$;
 
+create or replace function public.admin_execute_pending_sell_orders(target_date date default current_date)
+returns table (
+  result_order_id uuid,
+  result_user_id uuid,
+  result_player_id uuid,
+  result_status public.order_status,
+  result_flags_amount numeric(18,6),
+  result_units_amount numeric(24,10),
+  result_note text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  rec record;
+  v_wallet numeric(18,6);
+  v_price numeric(18,6);
+  v_active boolean;
+  v_holding_units numeric(24,10);
+  v_proceeds numeric(18,6);
+  v_updated_rows int;
+begin
+  perform public.assert_admin();
+
+  for rec in
+    select
+      o.id,
+      o.user_id,
+      o.player_id,
+      o.flags_amount,
+      o.units_amount
+    from public.orders o
+    where o.trade_date = target_date
+      and o.order_type = 'sell'
+      and o.status = 'pending'
+    order by o.created_at asc, o.id asc
+    for update skip locked
+  loop
+    select w.liquid_flags
+    into v_wallet
+    from public.wallets w
+    where w.user_id = rec.user_id
+    for update;
+
+    select p.current_price, p.active
+    into v_price, v_active
+    from public.players p
+    where p.id = rec.player_id;
+
+    if v_wallet is null then
+      update public.orders o
+      set status = 'failed', executed_at = now()
+      where o.id = rec.id and o.status = 'pending';
+
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'wallet_missing'::text;
+
+      continue;
+    end if;
+
+    if v_price is null or coalesce(v_active, false) = false then
+      update public.orders o
+      set status = 'failed', executed_at = now()
+      where o.id = rec.id and o.status = 'pending';
+
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'player_unavailable'::text;
+
+      continue;
+    end if;
+
+    if rec.units_amount is null or rec.units_amount <= 0 then
+      update public.orders o
+      set status = 'failed', executed_at = now()
+      where o.id = rec.id and o.status = 'pending';
+
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'invalid_units_amount'::text;
+
+      continue;
+    end if;
+
+    select h.units
+    into v_holding_units
+    from public.holdings h
+    where h.user_id = rec.user_id
+      and h.player_id = rec.player_id
+    for update;
+
+    if v_holding_units is null or rec.units_amount > v_holding_units then
+      update public.orders o
+      set status = 'failed', executed_at = now()
+      where o.id = rec.id and o.status = 'pending';
+
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'insufficient_units_at_execution'::text;
+
+      continue;
+    end if;
+
+    v_proceeds := round((rec.units_amount * v_price)::numeric, 6)::numeric(18,6);
+
+    update public.holdings h
+    set
+      units = h.units - rec.units_amount,
+      avg_cost_basis =
+        case
+          when (h.units - rec.units_amount) <= 0 then 0
+          else h.avg_cost_basis
+        end,
+      updated_at = now()
+    where h.user_id = rec.user_id
+      and h.player_id = rec.player_id;
+
+    delete from public.holdings h
+    where h.user_id = rec.user_id
+      and h.player_id = rec.player_id
+      and h.units <= 0.005::numeric;
+
+    update public.wallets w
+    set liquid_flags = w.liquid_flags + v_proceeds,
+        updated_at = now()
+    where w.user_id = rec.user_id;
+
+    update public.orders o
+    set
+      status = 'executed',
+      flags_amount = v_proceeds,
+      executed_at = now()
+    where o.id = rec.id and o.status = 'pending';
+
+    get diagnostics v_updated_rows = row_count;
+    if v_updated_rows = 0 then
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'order_no_longer_pending'::text;
+
+      continue;
+    end if;
+
+    insert into public.wallet_ledger (user_id, delta_flags, reason, ref_id)
+    values (
+      rec.user_id,
+      v_proceeds,
+      'sell_order_execute',
+      rec.id
+    );
+
+    return query
+    select
+      rec.id,
+      rec.user_id,
+      rec.player_id,
+      'executed'::public.order_status,
+      v_proceeds,
+      rec.units_amount,
+      'executed'::text;
+  end loop;
+end;
+$$;
+
 revoke all on function public.admin_preview_pending_buy_orders(date) from public;
 grant execute on function public.admin_preview_pending_buy_orders(date) to authenticated;
 
+revoke all on function public.admin_preview_pending_sell_orders(date) from public;
+grant execute on function public.admin_preview_pending_sell_orders(date) to authenticated;
+
 revoke all on function public.admin_execute_pending_buy_orders(date) from public;
 grant execute on function public.admin_execute_pending_buy_orders(date) to authenticated;
+
+revoke all on function public.admin_execute_pending_sell_orders(date) from public;
+grant execute on function public.admin_execute_pending_sell_orders(date) to authenticated;
 
 create or replace function public.admin_preview_player_repricing(target_date date default current_date)
 returns table (
@@ -849,7 +1344,10 @@ begin
       coalesce(
         sum(
           case
-            when o.order_type = 'sell' then coalesce(o.units_amount, 0::numeric) * p.current_price
+            when o.order_type = 'sell' then coalesce(
+              o.flags_amount,
+              coalesce(o.units_amount, 0::numeric) * p.current_price
+            )
             else 0::numeric
           end
         ),

@@ -1,5 +1,5 @@
 -- Patch for existing projects:
--- adds admin RPCs for pending buy-order preview and execution.
+-- adds admin RPCs for pending buy/sell order preview and execution.
 
 alter table public.orders
 drop constraint if exists orders_check;
@@ -22,9 +22,18 @@ check (
   (
     order_type = 'sell'
     and units_amount is not null
-    and flags_amount is null
+    and (
+      (status = 'pending')
+      or
+      (status = 'executed' and flags_amount is not null)
+      or
+      (status in ('cancelled', 'failed'))
+    )
   )
 );
+
+delete from public.holdings
+where units <= 0.005::numeric;
 
 create or replace function public.admin_preview_pending_buy_orders(target_date date default current_date)
 returns table (
@@ -53,6 +62,39 @@ begin
     and o.status = 'pending'
   group by o.user_id, p.username
   order by pending_flags_total desc, pending_order_count desc;
+end;
+$$;
+
+create or replace function public.admin_preview_pending_sell_orders(target_date date default current_date)
+returns table (
+  result_user_id uuid,
+  result_username text,
+  result_pending_order_count int,
+  result_pending_units_total numeric(24,10),
+  result_estimated_flags_total numeric(18,6)
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.assert_admin();
+
+  return query
+  select
+    o.user_id,
+    p.username,
+    count(*)::int as pending_order_count,
+    coalesce(sum(o.units_amount), 0::numeric(24,10)) as pending_units_total,
+    coalesce(sum(o.units_amount * pl.current_price), 0::numeric(18,6)) as estimated_flags_total
+  from public.orders o
+  join public.profiles p on p.id = o.user_id
+  join public.players pl on pl.id = o.player_id
+  where o.trade_date = target_date
+    and o.order_type = 'sell'
+    and o.status = 'pending'
+  group by o.user_id, p.username
+  order by estimated_flags_total desc, pending_order_count desc;
 end;
 $$;
 
@@ -91,6 +133,7 @@ begin
       and o.order_type = 'buy'
       and o.status = 'pending'
     order by o.created_at asc, o.id asc
+    for update skip locked
   loop
     select w.liquid_flags
     into v_wallet
@@ -251,8 +294,210 @@ begin
 end;
 $$;
 
+create or replace function public.admin_execute_pending_sell_orders(target_date date default current_date)
+returns table (
+  result_order_id uuid,
+  result_user_id uuid,
+  result_player_id uuid,
+  result_status public.order_status,
+  result_flags_amount numeric(18,6),
+  result_units_amount numeric(24,10),
+  result_note text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  rec record;
+  v_wallet numeric(18,6);
+  v_price numeric(18,6);
+  v_active boolean;
+  v_holding_units numeric(24,10);
+  v_proceeds numeric(18,6);
+  v_updated_rows int;
+begin
+  perform public.assert_admin();
+
+  for rec in
+    select
+      o.id,
+      o.user_id,
+      o.player_id,
+      o.flags_amount,
+      o.units_amount
+    from public.orders o
+    where o.trade_date = target_date
+      and o.order_type = 'sell'
+      and o.status = 'pending'
+    order by o.created_at asc, o.id asc
+    for update skip locked
+  loop
+    select w.liquid_flags
+    into v_wallet
+    from public.wallets w
+    where w.user_id = rec.user_id
+    for update;
+
+    select p.current_price, p.active
+    into v_price, v_active
+    from public.players p
+    where p.id = rec.player_id;
+
+    if v_wallet is null then
+      update public.orders o
+      set status = 'failed', executed_at = now()
+      where o.id = rec.id and o.status = 'pending';
+
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'wallet_missing'::text;
+
+      continue;
+    end if;
+
+    if v_price is null or coalesce(v_active, false) = false then
+      update public.orders o
+      set status = 'failed', executed_at = now()
+      where o.id = rec.id and o.status = 'pending';
+
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'player_unavailable'::text;
+
+      continue;
+    end if;
+
+    if rec.units_amount is null or rec.units_amount <= 0 then
+      update public.orders o
+      set status = 'failed', executed_at = now()
+      where o.id = rec.id and o.status = 'pending';
+
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'invalid_units_amount'::text;
+
+      continue;
+    end if;
+
+    select h.units
+    into v_holding_units
+    from public.holdings h
+    where h.user_id = rec.user_id
+      and h.player_id = rec.player_id
+    for update;
+
+    if v_holding_units is null or rec.units_amount > v_holding_units then
+      update public.orders o
+      set status = 'failed', executed_at = now()
+      where o.id = rec.id and o.status = 'pending';
+
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'insufficient_units_at_execution'::text;
+
+      continue;
+    end if;
+
+    v_proceeds := round((rec.units_amount * v_price)::numeric, 6)::numeric(18,6);
+
+    update public.holdings h
+    set
+      units = h.units - rec.units_amount,
+      avg_cost_basis =
+        case
+          when (h.units - rec.units_amount) <= 0 then 0
+          else h.avg_cost_basis
+        end,
+      updated_at = now()
+    where h.user_id = rec.user_id
+      and h.player_id = rec.player_id;
+
+    delete from public.holdings h
+    where h.user_id = rec.user_id
+      and h.player_id = rec.player_id
+      and h.units <= 0.005::numeric;
+
+    update public.wallets w
+    set liquid_flags = w.liquid_flags + v_proceeds,
+        updated_at = now()
+    where w.user_id = rec.user_id;
+
+    update public.orders o
+    set
+      status = 'executed',
+      flags_amount = v_proceeds,
+      executed_at = now()
+    where o.id = rec.id and o.status = 'pending';
+
+    get diagnostics v_updated_rows = row_count;
+    if v_updated_rows = 0 then
+      return query
+      select
+        rec.id,
+        rec.user_id,
+        rec.player_id,
+        'failed'::public.order_status,
+        rec.flags_amount,
+        rec.units_amount,
+        'order_no_longer_pending'::text;
+
+      continue;
+    end if;
+
+    insert into public.wallet_ledger (user_id, delta_flags, reason, ref_id)
+    values (
+      rec.user_id,
+      v_proceeds,
+      'sell_order_execute',
+      rec.id
+    );
+
+    return query
+    select
+      rec.id,
+      rec.user_id,
+      rec.player_id,
+      'executed'::public.order_status,
+      v_proceeds,
+      rec.units_amount,
+      'executed'::text;
+  end loop;
+end;
+$$;
+
 revoke all on function public.admin_preview_pending_buy_orders(date) from public;
 grant execute on function public.admin_preview_pending_buy_orders(date) to authenticated;
 
+revoke all on function public.admin_preview_pending_sell_orders(date) from public;
+grant execute on function public.admin_preview_pending_sell_orders(date) to authenticated;
+
 revoke all on function public.admin_execute_pending_buy_orders(date) from public;
 grant execute on function public.admin_execute_pending_buy_orders(date) to authenticated;
+
+revoke all on function public.admin_execute_pending_sell_orders(date) from public;
+grant execute on function public.admin_execute_pending_sell_orders(date) to authenticated;

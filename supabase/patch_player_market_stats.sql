@@ -20,7 +20,7 @@ begin
   from public.players p
   left join public.holdings h
     on h.player_id = p.id
-    and h.units > 0
+    and h.units > 0.005::numeric
   group by p.id
   order by p.id;
 end;

@@ -24,6 +24,10 @@ type PendingBuySumRow = {
   flags_amount: number | null;
 };
 
+type PendingSellSumRow = {
+  units_amount: number | null;
+};
+
 type HoldingRow = {
   units: number;
   avg_cost_basis: number;
@@ -85,9 +89,11 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
   });
   const [wallet, setWallet] = useState<WalletRow | null>(null);
   const [pendingBuyFlags, setPendingBuyFlags] = useState(0);
+  const [pendingSellUnits, setPendingSellUnits] = useState(0);
   const [holding, setHolding] = useState<HoldingRow | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [buyAmount, setBuyAmount] = useState("");
+  const [sellAmount, setSellAmount] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -126,6 +132,13 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       .eq("user_id", userId)
       .eq("order_type", "buy")
       .eq("status", "pending");
+    const pendingSellSumQuery = supabase
+      .from("orders")
+      .select("units_amount")
+      .eq("user_id", userId)
+      .eq("player_id", playerId)
+      .eq("order_type", "sell")
+      .eq("status", "pending");
     const ordersQuery = supabase
       .from("orders")
       .select("id,order_type,status,flags_amount,units_amount,trade_date,created_at")
@@ -140,6 +153,7 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       walletResult,
       holdingResult,
       pendingBuySumResult,
+      pendingSellSumResult,
       ordersResult,
       marketStatsResult
     ] = await Promise.all([
@@ -147,6 +161,7 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       walletQuery,
       holdingQuery,
       pendingBuySumQuery,
+      pendingSellSumQuery,
       ordersQuery,
       marketStatsQuery
     ]);
@@ -171,6 +186,11 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       setLoading(false);
       return;
     }
+    if (pendingSellSumResult.error) {
+      setError(pendingSellSumResult.error.message);
+      setLoading(false);
+      return;
+    }
     if (ordersResult.error) {
       setError(ordersResult.error.message);
       setLoading(false);
@@ -186,6 +206,12 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       0
     );
     setPendingBuyFlags(pendingBuyTotal);
+    const pendingSellRows = (pendingSellSumResult.data ?? []) as PendingSellSumRow[];
+    const pendingSellTotal = pendingSellRows.reduce(
+      (sum, row) => sum + (row.units_amount ?? 0),
+      0
+    );
+    setPendingSellUnits(pendingSellTotal);
     setOrders((ordersResult.data ?? []) as OrderRow[]);
     const marketStatsRows = marketStatsResult.error
       ? []
@@ -258,6 +284,64 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
     setBusy(false);
   }
 
+  async function submitSellOrder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    setMessage("");
+
+    if (!player) {
+      setError("Player not loaded.");
+      setBusy(false);
+      return;
+    }
+
+    const parsedFlags = Number.parseFloat(sellAmount);
+    if (!Number.isFinite(parsedFlags) || parsedFlags <= 0) {
+      setError("Enter a valid sell flags amount greater than 0.");
+      setBusy(false);
+      return;
+    }
+
+    if (!player.current_price || player.current_price <= 0) {
+      setError("Current player price is not valid.");
+      setBusy(false);
+      return;
+    }
+
+    const estimatedUnits = parsedFlags / player.current_price;
+    const availableUnitsForSell = Math.max((holding?.units ?? 0) - pendingSellUnits, 0);
+    if (estimatedUnits > availableUnitsForSell) {
+      setError(
+        `Sell units exceed available units for new sell orders (${formatTwoDecimals(availableUnitsForSell)}).`
+      );
+      setBusy(false);
+      return;
+    }
+
+    const { error: insertError } = await supabase.from("orders").insert({
+      user_id: userId,
+      player_id: player.id,
+      order_type: "sell",
+      flags_amount: parsedFlags,
+      units_amount: estimatedUnits,
+      trade_date: todayString()
+    });
+
+    if (insertError) {
+      setError(insertError.message);
+      setBusy(false);
+      return;
+    }
+
+    setMessage(
+      `Sell order created with status 'pending' (estimated units: ${formatTwoDecimals(estimatedUnits)}).`
+    );
+    setSellAmount("");
+    await loadData();
+    setBusy(false);
+  }
+
   if (loading) {
     return (
       <div className="card">
@@ -290,11 +374,23 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
         <h2>Your Position</h2>
         <p>Liquid flags: {formatFlagAmount(wallet?.liquid_flags)}</p>
         <p>Pending buy flags: {formatFlagAmount(pendingBuyFlags)}</p>
+        <p>Pending sell units: {formatTwoDecimals(pendingSellUnits)}</p>
         <p>
           Available for new buy orders:{" "}
           {formatFlagAmount(
             wallet ? Math.max(wallet.liquid_flags - pendingBuyFlags, 0) : 0
           )}
+        </p>
+        <p>
+          Estimated available sell flags:{" "}
+          {formatFlagAmount(
+            Math.max((holding?.units ?? 0) - pendingSellUnits, 0) *
+              (player?.current_price ?? 0)
+          )}
+        </p>
+        <p>
+          Available for new sell orders:{" "}
+          {formatTwoDecimals(Math.max((holding?.units ?? 0) - pendingSellUnits, 0))}
         </p>
         <p>Units held: {holding ? formatTwoDecimals(holding.units) : "0.00"}</p>
         <p>
@@ -306,8 +402,8 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       <div className="card">
         <h2>Place Buy Order</h2>
         <p className="muted">
-          Current implementation creates pending orders only. Matching/execution
-          will be added in a later phase.
+          Creates a pending buy order. Admin order-clearing executes it at the current
+          market price.
         </p>
         <form className="grid" onSubmit={submitBuyOrder}>
           <label>
@@ -325,6 +421,44 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
             {busy ? "Submitting..." : "Create Buy Order"}
           </button>
         </form>
+        <p className="muted">
+          Estimated units at current price:{" "}
+          {formatTwoDecimals(
+            (Number.parseFloat(buyAmount || "0") || 0) / (player?.current_price || 1)
+          )}
+        </p>
+        {message ? <p className="success">{message}</p> : null}
+        {error ? <p className="error">{error}</p> : null}
+      </div>
+
+      <div className="card">
+        <h2>Place Sell Order</h2>
+        <p className="muted">
+          Enter sell amount in flags. The app converts to estimated units at current
+          price and creates a pending sell order.
+        </p>
+        <form className="grid" onSubmit={submitSellOrder}>
+          <label>
+            Flags amount
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={sellAmount}
+              onChange={(e) => setSellAmount(e.target.value)}
+              required
+            />
+          </label>
+          <button type="submit" disabled={busy}>
+            {busy ? "Submitting..." : "Create Sell Order"}
+          </button>
+        </form>
+        <p className="muted">
+          Estimated units at current price:{" "}
+          {formatTwoDecimals(
+            (Number.parseFloat(sellAmount || "0") || 0) / (player?.current_price || 1)
+          )}
+        </p>
         {message ? <p className="success">{message}</p> : null}
         {error ? <p className="error">{error}</p> : null}
       </div>
