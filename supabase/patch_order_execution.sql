@@ -1,6 +1,31 @@
 -- Patch for existing projects:
 -- adds admin RPCs for pending buy-order preview and execution.
 
+alter table public.orders
+drop constraint if exists orders_check;
+
+alter table public.orders
+add constraint orders_check
+check (
+  (
+    order_type = 'buy'
+    and flags_amount is not null
+    and (
+      (status = 'pending' and units_amount is null)
+      or
+      (status = 'executed' and units_amount is not null)
+      or
+      (status in ('cancelled', 'failed') and units_amount is null)
+    )
+  )
+  or
+  (
+    order_type = 'sell'
+    and units_amount is not null
+    and flags_amount is null
+  )
+);
+
 create or replace function public.admin_preview_pending_buy_orders(target_date date default current_date)
 returns table (
   result_user_id uuid,

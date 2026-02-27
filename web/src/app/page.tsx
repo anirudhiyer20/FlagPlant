@@ -20,6 +20,7 @@ export default function HomePage() {
           <li>Open admin and preview/publish winners.</li>
           <li>Open players, open a player detail, and create a buy order.</li>
           <li>Open My Orders and confirm order history appears.</li>
+          <li>Open admin and run order clearing + repricing.</li>
         </ol>
       </div>
 

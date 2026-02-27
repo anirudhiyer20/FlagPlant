@@ -274,6 +274,15 @@ function DashboardPanel({ userId }: { userId: string }) {
     });
   }, [loadDashboard]);
 
+  const totalHoldingsMarketValue = data.holdings.reduce(
+    (sum, holding) => sum + holding.market_value,
+    0
+  );
+  const totalNetWorth =
+    data.wallet?.liquid_flags === undefined
+      ? null
+      : data.wallet.liquid_flags + totalHoldingsMarketValue;
+
   return (
     <div className="grid">
       <div className="card">
@@ -303,6 +312,13 @@ function DashboardPanel({ userId }: { userId: string }) {
             <p>
               Liquid flags:{" "}
               <strong>{formatFlagAmount(data.wallet?.liquid_flags)}</strong>
+            </p>
+            <p>
+              Holdings market value:{" "}
+              <strong>{formatFlagAmount(totalHoldingsMarketValue)}</strong>
+            </p>
+            <p>
+              Total net worth: <strong>{formatFlagAmount(totalNetWorth)}</strong>
             </p>
           </div>
 

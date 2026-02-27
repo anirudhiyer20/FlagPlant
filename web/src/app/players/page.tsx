@@ -11,6 +11,14 @@ type PlayerRow = {
   name: string;
   seed_price: number;
   current_price: number;
+  holder_count: number;
+  invested_capital: number;
+};
+
+type PlayerMarketStatsRow = {
+  result_player_id: string;
+  result_holder_count: number;
+  result_invested_capital: number;
 };
 
 export default function PlayersPage() {
@@ -51,18 +59,43 @@ function PlayersTable() {
       setLoading(true);
       setError("");
 
-      const { data, error: fetchError } = await supabase
+      const playersQuery = supabase
         .from("players")
         .select("id,name,seed_price,current_price")
         .order("current_price", { ascending: false });
+      const marketStatsQuery = supabase.rpc("get_player_market_stats");
 
-      if (fetchError) {
-        setError(fetchError.message);
+      const [playersResult, marketStatsResult] = await Promise.all([
+        playersQuery,
+        marketStatsQuery
+      ]);
+
+      if (playersResult.error) {
+        setError(playersResult.error.message);
         setLoading(false);
         return;
       }
 
-      setPlayers((data ?? []) as PlayerRow[]);
+      const playersData = (playersResult.data ?? []) as Omit<
+        PlayerRow,
+        "holder_count" | "invested_capital"
+      >[];
+      const marketStatsData = marketStatsResult.error
+        ? []
+        : ((marketStatsResult.data ?? []) as PlayerMarketStatsRow[]);
+      const marketStatsByPlayerId = new Map(
+        marketStatsData.map((row) => [row.result_player_id, row])
+      );
+
+      setPlayers(
+        playersData.map((player) => ({
+          ...player,
+          holder_count:
+            marketStatsByPlayerId.get(player.id)?.result_holder_count ?? 0,
+          invested_capital:
+            marketStatsByPlayerId.get(player.id)?.result_invested_capital ?? 0
+        }))
+      );
       setLoading(false);
     }
 
@@ -87,6 +120,8 @@ function PlayersTable() {
                 <th>Name</th>
                 <th>Seed Price</th>
                 <th>Current Price</th>
+                <th>Holders</th>
+                <th>Invested Capital</th>
               </tr>
             </thead>
             <tbody>
@@ -97,6 +132,8 @@ function PlayersTable() {
                   </td>
                   <td>{formatFlagAmount(player.seed_price)}</td>
                   <td>{formatFlagAmount(player.current_price)}</td>
+                  <td>{player.holder_count}</td>
+                  <td>{formatFlagAmount(player.invested_capital)}</td>
                 </tr>
               ))}
             </tbody>

@@ -117,6 +117,10 @@ Also run `supabase/patch_order_budget_policy.sql` once to enforce combined
 pending buy-order budget limits against wallet balance.
 Also run `supabase/patch_order_execution.sql` once to add admin order-clearing
 RPC tools (pending buy execution into holdings/wallet/ledger).
+Also run `supabase/patch_repricing.sql` once to add admin repricing preview/apply
+RPC tools (price updates based on executed order flow).
+Also run `supabase/patch_player_market_stats.sql` once to add player card market
+stats RPC (`holders` and `invested capital`).
 
 ### A) Install dependencies
 
@@ -172,7 +176,9 @@ Open http://localhost:3000
 13. Open `/orders` and confirm your new order appears with `pending` status.
 14. Open `/admin`, choose date, preview pending buy orders, then execute pending buys.
 15. Open `/orders` and confirm status changes to `executed` (or `failed` if invalid at execution).
-16. Refresh `/dashboard` and confirm holdings + wallet values update after execution.
+16. In `/admin`, preview repricing then apply repricing for the same date.
+17. Refresh `/players` and confirm player prices updated.
+18. Refresh `/dashboard` and confirm holdings + wallet values update after execution.
 
 ---
 

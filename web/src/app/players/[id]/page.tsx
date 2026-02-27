@@ -29,6 +29,12 @@ type HoldingRow = {
   avg_cost_basis: number;
 };
 
+type PlayerMarketStatsRow = {
+  result_player_id: string;
+  result_holder_count: number;
+  result_invested_capital: number;
+};
+
 type OrderRow = {
   id: string;
   order_type: "buy" | "sell";
@@ -73,6 +79,10 @@ export default function PlayerDetailPage() {
 function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: string }) {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [player, setPlayer] = useState<PlayerRow | null>(null);
+  const [marketStats, setMarketStats] = useState({
+    holderCount: 0,
+    investedCapital: 0
+  });
   const [wallet, setWallet] = useState<WalletRow | null>(null);
   const [pendingBuyFlags, setPendingBuyFlags] = useState(0);
   const [holding, setHolding] = useState<HoldingRow | null>(null);
@@ -123,19 +133,22 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       .eq("player_id", playerId)
       .order("created_at", { ascending: false })
       .limit(20);
+    const marketStatsQuery = supabase.rpc("get_player_market_stats");
 
     const [
       playerResult,
       walletResult,
       holdingResult,
       pendingBuySumResult,
-      ordersResult
+      ordersResult,
+      marketStatsResult
     ] = await Promise.all([
       playerQuery,
       walletQuery,
       holdingQuery,
       pendingBuySumQuery,
-      ordersQuery
+      ordersQuery,
+      marketStatsQuery
     ]);
 
     if (playerResult.error) {
@@ -174,6 +187,16 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
     );
     setPendingBuyFlags(pendingBuyTotal);
     setOrders((ordersResult.data ?? []) as OrderRow[]);
+    const marketStatsRows = marketStatsResult.error
+      ? []
+      : ((marketStatsResult.data ?? []) as PlayerMarketStatsRow[]);
+    const playerMarketStats = marketStatsRows.find(
+      (row) => row.result_player_id === playerId
+    );
+    setMarketStats({
+      holderCount: playerMarketStats?.result_holder_count ?? 0,
+      investedCapital: playerMarketStats?.result_invested_capital ?? 0
+    });
     setLoading(false);
   }, [playerId, supabase, userId]);
 
@@ -259,6 +282,8 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
         <p>Seed price: {formatFlagAmount(player?.seed_price)}</p>
         <p>Current price: {formatFlagAmount(player?.current_price)}</p>
         <p>Baseline capital: {formatFlagAmount(player?.baseline_capital)}</p>
+        <p>Holders: {marketStats.holderCount}</p>
+        <p>Invested capital: {formatFlagAmount(marketStats.investedCapital)}</p>
       </div>
 
       <div className="card">

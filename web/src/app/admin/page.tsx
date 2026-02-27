@@ -72,6 +72,17 @@ type OrderExecutionRawRow = {
   note?: string;
 };
 
+type RepricingRow = {
+  result_player_id: string;
+  result_player_name: string;
+  result_pre_price: number;
+  result_post_price: number;
+  result_net_flow_flags: number;
+  result_total_units: number;
+  result_effective_capital: number;
+  result_price_multiplier: number;
+};
+
 function todayString(): string {
   const now = new Date();
   const y = now.getFullYear();
@@ -109,12 +120,14 @@ function AdminPanel({ userId }: { userId: string }) {
   const [loading, setLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [executingOrders, setExecutingOrders] = useState(false);
+  const [repricingBusy, setRepricingBusy] = useState(false);
   const [previewRows, setPreviewRows] = useState<WinnerRow[]>([]);
   const [publishedRows, setPublishedRows] = useState<PublishedRow[]>([]);
   const [pendingOrderSummaryRows, setPendingOrderSummaryRows] = useState<
     PendingOrderSummaryRow[]
   >([]);
   const [executionRows, setExecutionRows] = useState<OrderExecutionRow[]>([]);
+  const [repricingRows, setRepricingRows] = useState<RepricingRow[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -249,6 +262,49 @@ function AdminPanel({ userId }: { userId: string }) {
     setExecutingOrders(false);
   }
 
+  async function previewRepricing() {
+    setRepricingBusy(true);
+    setMessage("");
+    setError("");
+
+    const { data, error: repricingError } = await supabase.rpc(
+      "admin_preview_player_repricing",
+      { target_date: selectedDate }
+    );
+
+    if (repricingError) {
+      setError(repricingError.message);
+      setRepricingRows([]);
+      setRepricingBusy(false);
+      return;
+    }
+
+    setRepricingRows((data ?? []) as RepricingRow[]);
+    setRepricingBusy(false);
+  }
+
+  async function applyRepricing() {
+    setRepricingBusy(true);
+    setMessage("");
+    setError("");
+
+    const { data, error: repricingError } = await supabase.rpc(
+      "admin_apply_player_repricing",
+      { target_date: selectedDate }
+    );
+
+    if (repricingError) {
+      setError(repricingError.message);
+      setRepricingBusy(false);
+      return;
+    }
+
+    const rows = (data ?? []) as RepricingRow[];
+    setRepricingRows(rows);
+    setMessage("Applied repricing and wrote daily player snapshots.");
+    setRepricingBusy(false);
+  }
+
   async function publishWinners() {
     setPublishing(true);
     setMessage("");
@@ -308,7 +364,7 @@ function AdminPanel({ userId }: { userId: string }) {
           type="button"
           className="secondary"
           onClick={publishWinners}
-          disabled={publishing || loading || executingOrders}
+          disabled={publishing || loading || executingOrders || repricingBusy}
         >
           {publishing ? "Publishing..." : "Publish Winners"}
         </button>
@@ -374,7 +430,7 @@ function AdminPanel({ userId }: { userId: string }) {
         <button
           type="button"
           onClick={loadPendingBuySummary}
-          disabled={loading || publishing || executingOrders}
+          disabled={loading || publishing || executingOrders || repricingBusy}
         >
           Preview Pending Buy Orders
         </button>
@@ -382,7 +438,7 @@ function AdminPanel({ userId }: { userId: string }) {
           type="button"
           className="secondary"
           onClick={executePendingBuyOrders}
-          disabled={loading || publishing || executingOrders}
+          disabled={loading || publishing || executingOrders || repricingBusy}
         >
           {executingOrders ? "Executing..." : "Execute Pending Buy Orders"}
         </button>
@@ -442,6 +498,52 @@ function AdminPanel({ userId }: { userId: string }) {
           </table>
         </>
       ) : null}
+
+      <h2>Repricing</h2>
+      <div className="grid">
+        <button
+          type="button"
+          onClick={previewRepricing}
+          disabled={loading || publishing || executingOrders || repricingBusy}
+        >
+          {repricingBusy ? "Working..." : "Preview Repricing"}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={applyRepricing}
+          disabled={loading || publishing || executingOrders || repricingBusy}
+        >
+          {repricingBusy ? "Working..." : "Apply Repricing"}
+        </button>
+      </div>
+
+      {repricingRows.length === 0 ? (
+        <p className="muted">No repricing rows loaded for selected date.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Pre</th>
+              <th>Post</th>
+              <th>Flow</th>
+              <th>Multiplier</th>
+            </tr>
+          </thead>
+          <tbody>
+            {repricingRows.map((row) => (
+              <tr key={row.result_player_id}>
+                <td>{row.result_player_name}</td>
+                <td>{formatFlagAmount(row.result_pre_price)}</td>
+                <td>{formatFlagAmount(row.result_post_price)}</td>
+                <td>{formatFlagAmount(row.result_net_flow_flags)}</td>
+                <td>{formatTwoDecimals(row.result_price_multiplier)}x</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
