@@ -14,6 +14,7 @@ export default function HomePage() {
         <ol>
           <li>Open auth and log in.</li>
           <li>Open daily opinion and submit once for today.</li>
+          <li>Open vote and cast votes on assigned opinions.</li>
           <li>Open players and confirm seeded prices render.</li>
         </ol>
       </div>
@@ -25,6 +26,9 @@ export default function HomePage() {
         </p>
         <p>
           <Link href="/opinion">Go to Daily Opinion</Link>
+        </p>
+        <p>
+          <Link href="/vote">Go to Vote</Link>
         </p>
         <p>
           <Link href="/players">Go to Players</Link>

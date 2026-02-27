@@ -80,6 +80,9 @@ export default function AuthPage() {
         <Link href="/opinion">Go to Daily Opinion</Link>
       </p>
       <p>
+        <Link href="/vote">Go to Vote</Link>
+      </p>
+      <p>
         <Link href="/players">Go to Players</Link>
       </p>
 

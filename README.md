@@ -102,7 +102,12 @@ A starter Next.js app now exists in `web/` with:
 - Home page (`/`)
 - Auth page (`/auth`) for signup/login
 - Daily opinion page (`/opinion`) with one submission per user/day
+- Vote page (`/vote`) for assigned-opinion voting
 - Players page (`/players`) reading from Supabase `public.players`
+
+If you already set up Supabase before this update, run
+`supabase/patch_vote_policy.sql` once in Supabase SQL Editor to apply the latest
+RLS policy changes for voting reads.
 
 ### A) Install dependencies
 
@@ -145,9 +150,12 @@ Open http://localhost:3000
    - one row in `public.profiles`
    - one row in `public.wallets`
    - `wallets.liquid_flags = 100`
-3. Open `/opinion`, submit a short message, then confirm one row appears in `public.opinions`.
-4. Try a second opinion same day and confirm it is blocked.
-5. Open `/players` and confirm list loads (50 players).
+3. Open `/opinion` with at least two users and submit one opinion each.
+4. Run `supabase/dev_seed_vote_assignments.sql` in Supabase SQL Editor.
+5. Open `/vote` for one of those users and cast a vote.
+6. Confirm one row appears in `public.opinion_votes`.
+7. Try voting the same opinion again and confirm it is blocked.
+8. Open `/players` and confirm list loads (50 players).
 
 ---
 

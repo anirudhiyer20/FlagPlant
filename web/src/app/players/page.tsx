@@ -22,6 +22,9 @@ export default function PlayersPage() {
       <p>
         <Link href="/opinion">Go to Daily Opinion</Link>
       </p>
+      <p>
+        <Link href="/vote">Go to Vote</Link>
+      </p>
       <RequireAuth>{() => <PlayersTable />}</RequireAuth>
     </main>
   );

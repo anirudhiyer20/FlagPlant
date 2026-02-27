@@ -259,6 +259,19 @@ drop policy if exists wallets_select_own on public.wallets;
 create policy wallets_select_own on public.wallets for select using (auth.uid() = user_id);
 drop policy if exists opinions_select_own on public.opinions;
 create policy opinions_select_own on public.opinions for select using (auth.uid() = user_id);
+drop policy if exists opinions_select_assigned on public.opinions;
+create policy opinions_select_assigned
+on public.opinions
+for select
+using (
+  exists (
+    select 1
+    from public.opinion_assignments oa
+    where oa.opinion_id = opinions.id
+      and oa.viewer_user_id = auth.uid()
+      and oa.assigned_for_date = opinions.submitted_for_date
+  )
+);
 drop policy if exists opinions_insert_own on public.opinions;
 create policy opinions_insert_own on public.opinions for insert with check (auth.uid() = user_id);
 drop policy if exists assignments_select_own on public.opinion_assignments;
