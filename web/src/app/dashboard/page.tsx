@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { formatFlagAmount } from "@/lib/format";
+import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 
 type ProfileRow = {
   username: string;
@@ -28,6 +28,27 @@ type WinnerRow = {
   votes_received: number;
 };
 
+type HoldingRawRow = {
+  player_id: string;
+  units: number;
+  avg_cost_basis: number;
+};
+
+type PlayerLookupRow = {
+  id: string;
+  name: string;
+  current_price: number;
+};
+
+type HoldingViewRow = {
+  player_id: string;
+  player_name: string;
+  units: number;
+  avg_cost_basis: number;
+  current_price: number;
+  market_value: number;
+};
+
 type DashboardData = {
   profile: ProfileRow | null;
   wallet: WalletRow | null;
@@ -35,6 +56,7 @@ type DashboardData = {
   assignmentsCount: number;
   votesCount: number;
   latestWinner: WinnerRow | null;
+  holdings: HoldingViewRow[];
 };
 
 function todayString(): string {
@@ -62,6 +84,9 @@ export default function DashboardPage() {
         <Link href="/players">Go to Players</Link>
       </p>
       <p>
+        <Link href="/orders">Go to My Orders</Link>
+      </p>
+      <p>
         <Link href="/admin">Go to Admin</Link>
       </p>
       <RequireAuth>{(session) => <DashboardPanel userId={session.user.id} />}</RequireAuth>
@@ -80,7 +105,8 @@ function DashboardPanel({ userId }: { userId: string }) {
     todayOpinion: null,
     assignmentsCount: 0,
     votesCount: 0,
-    latestWinner: null
+    latestWinner: null,
+    holdings: []
   });
   const dashboardDate = useMemo(() => todayString(), []);
 
@@ -121,6 +147,10 @@ function DashboardPanel({ userId }: { userId: string }) {
       .order("winner_date", { ascending: false })
       .limit(1)
       .maybeSingle();
+    const holdingsQuery = supabase
+      .from("holdings")
+      .select("player_id,units,avg_cost_basis")
+      .eq("user_id", userId);
 
     const [
       profileResult,
@@ -128,14 +158,16 @@ function DashboardPanel({ userId }: { userId: string }) {
       opinionResult,
       assignmentsResult,
       votesResult,
-      latestWinnerResult
+      latestWinnerResult,
+      holdingsResult
     ] = await Promise.all([
       profileQuery,
       walletQuery,
       opinionQuery,
       assignmentsQuery,
       votesQuery,
-      latestWinnerQuery
+      latestWinnerQuery,
+      holdingsQuery
     ]);
 
     if (profileResult.error) {
@@ -174,6 +206,49 @@ function DashboardPanel({ userId }: { userId: string }) {
       setLoading(false);
       return;
     }
+    if (holdingsResult.error) {
+      setError(holdingsResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+
+    const holdingsRaw = (holdingsResult.data ?? []) as HoldingRawRow[];
+    const playerIds = holdingsRaw.map((row) => row.player_id);
+    let playerMap = new Map<string, PlayerLookupRow>();
+
+    if (playerIds.length > 0) {
+      const { data: playersData, error: playersError } = await supabase
+        .from("players")
+        .select("id,name,current_price")
+        .in("id", playerIds);
+
+      if (playersError) {
+        setError(playersError.message);
+        setBusy(false);
+        setLoading(false);
+        return;
+      }
+
+      playerMap = new Map(
+        ((playersData ?? []) as PlayerLookupRow[]).map((row) => [row.id, row])
+      );
+    }
+
+    const holdings = holdingsRaw
+      .map((row) => {
+        const player = playerMap.get(row.player_id);
+        if (!player) return null;
+        return {
+          player_id: row.player_id,
+          player_name: player.name,
+          units: row.units,
+          avg_cost_basis: row.avg_cost_basis,
+          current_price: player.current_price,
+          market_value: row.units * player.current_price
+        } as HoldingViewRow;
+      })
+      .filter((row): row is HoldingViewRow => row !== null);
 
     setData({
       profile: (profileResult.data as ProfileRow | null) ?? null,
@@ -181,7 +256,8 @@ function DashboardPanel({ userId }: { userId: string }) {
       todayOpinion: (opinionResult.data as OpinionRow | null) ?? null,
       assignmentsCount: assignmentsResult.count ?? 0,
       votesCount: votesResult.count ?? 0,
-      latestWinner: (latestWinnerResult.data as WinnerRow | null) ?? null
+      latestWinner: (latestWinnerResult.data as WinnerRow | null) ?? null,
+      holdings
     });
 
     setBusy(false);
@@ -223,20 +299,41 @@ function DashboardPanel({ userId }: { userId: string }) {
       {!loading && !error ? (
         <>
           <div className="card">
-            <h2>Account</h2>
-            <p>
-              Username: <strong>{data.profile?.username ?? "--"}</strong>
-            </p>
-            <p>Email: {data.profile?.email ?? "--"}</p>
-            <p>Role: {data.profile?.role ?? "--"}</p>
-          </div>
-
-          <div className="card">
             <h2>Wallet</h2>
             <p>
               Liquid flags:{" "}
               <strong>{formatFlagAmount(data.wallet?.liquid_flags)}</strong>
             </p>
+          </div>
+
+          <div className="card">
+            <h2>Holdings</h2>
+            {data.holdings.length === 0 ? (
+              <p className="muted">No holdings yet.</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Units</th>
+                    <th>Avg Cost</th>
+                    <th>Current Price</th>
+                    <th>Market Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.holdings.map((holding) => (
+                    <tr key={holding.player_id}>
+                      <td>{holding.player_name}</td>
+                      <td>{formatTwoDecimals(holding.units)}</td>
+                      <td>{formatFlagAmount(holding.avg_cost_basis)}</td>
+                      <td>{formatFlagAmount(holding.current_price)}</td>
+                      <td>{formatFlagAmount(holding.market_value)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
 
           <div className="card">
@@ -277,6 +374,15 @@ function DashboardPanel({ userId }: { userId: string }) {
             ) : (
               <p className="muted">No winner result yet for this account.</p>
             )}
+          </div>
+
+          <div className="card">
+            <h2>Account</h2>
+            <p>
+              Username: <strong>{data.profile?.username ?? "--"}</strong>
+            </p>
+            <p>Email: {data.profile?.email ?? "--"}</p>
+            <p>Role: {data.profile?.role ?? "--"}</p>
           </div>
         </>
       ) : null}

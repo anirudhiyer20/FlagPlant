@@ -38,6 +38,9 @@ export default function OpinionPage() {
       <p>
         <Link href="/admin">Go to Admin</Link>
       </p>
+      <p>
+        <Link href="/orders">Go to My Orders</Link>
+      </p>
       <RequireAuth>{(session) => <OpinionForm userId={session.user.id} />}</RequireAuth>
     </main>
   );

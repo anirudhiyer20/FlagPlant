@@ -106,11 +106,15 @@ A starter Next.js app now exists in `web/` with:
 - Vote page (`/vote`) for assigned-opinion voting
 - Admin page (`/admin`) for winner preview/publish (admin users only)
 - Players page (`/players`) reading from Supabase `public.players`
+- Player detail page (`/players/[id]`) with buy-order form
+- Orders page (`/orders`) for personal order history
 
 If you already set up Supabase before this update, run
 `supabase/patch_vote_policy.sql` once in Supabase SQL Editor to apply the latest
 RLS policy changes for voting reads.
 Also run `supabase/patch_admin_winners.sql` once to add admin winner RPC tools.
+Also run `supabase/patch_order_budget_policy.sql` once to enforce combined
+pending buy-order budget limits against wallet balance.
 
 ### A) Install dependencies
 
@@ -162,7 +166,9 @@ Open http://localhost:3000
 9. Open `/admin` as your admin account, preview winners, then publish winners.
 10. Confirm rows appear in `public.daily_winners` and reward entries in `public.wallet_ledger`.
 11. Refresh `/dashboard` and confirm latest winner result appears for rewarded users.
-12. Open `/players` and confirm list loads (50 players).
+12. Open `/players`, click a player, and create a buy order.
+13. Open `/orders` and confirm your new order appears with `pending` status.
+14. Refresh `/dashboard` and confirm holdings card loads (it may be empty until order execution logic is added).
 
 ---
 

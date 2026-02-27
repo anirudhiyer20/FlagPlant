@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import RequireAuth from "@/components/require-auth";
+import { formatFlagAmount } from "@/lib/format";
 
 type PlayerRow = {
   id: string;
@@ -30,6 +31,9 @@ export default function PlayersPage() {
       </p>
       <p>
         <Link href="/admin">Go to Admin</Link>
+      </p>
+      <p>
+        <Link href="/orders">Go to My Orders</Link>
       </p>
       <RequireAuth>{() => <PlayersTable />}</RequireAuth>
     </main>
@@ -88,9 +92,11 @@ function PlayersTable() {
             <tbody>
               {players.map((player) => (
                 <tr key={player.id}>
-                  <td>{player.name}</td>
-                  <td>{player.seed_price}</td>
-                  <td>{player.current_price}</td>
+                  <td>
+                    <Link href={`/players/${player.id}`}>{player.name}</Link>
+                  </td>
+                  <td>{formatFlagAmount(player.seed_price)}</td>
+                  <td>{formatFlagAmount(player.current_price)}</td>
                 </tr>
               ))}
             </tbody>

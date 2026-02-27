@@ -7,7 +7,7 @@ export default function HomePage() {
       <p className="muted">
         Your Supabase database is live. This app now includes auth, protected
         pages, a daily opinion submit flow, voting, winner admin tools, and a
-        live players list.
+        first market order workflow.
       </p>
 
       <div className="card">
@@ -18,7 +18,8 @@ export default function HomePage() {
           <li>Open daily opinion and submit once for today.</li>
           <li>Open vote and cast votes on assigned opinions.</li>
           <li>Open admin and preview/publish winners.</li>
-          <li>Open players and confirm seeded prices render.</li>
+          <li>Open players, open a player detail, and create a buy order.</li>
+          <li>Open My Orders and confirm order history appears.</li>
         </ol>
       </div>
 
@@ -41,6 +42,9 @@ export default function HomePage() {
         </p>
         <p>
           <Link href="/players">Go to Players</Link>
+        </p>
+        <p>
+          <Link href="/orders">Go to My Orders</Link>
         </p>
       </div>
     </main>

@@ -285,7 +285,39 @@ create policy holdings_select_own on public.holdings for select using (auth.uid(
 drop policy if exists orders_select_own on public.orders;
 create policy orders_select_own on public.orders for select using (auth.uid() = user_id);
 drop policy if exists orders_insert_own on public.orders;
-create policy orders_insert_own on public.orders for insert with check (auth.uid() = user_id);
+create policy orders_insert_own
+on public.orders
+for insert
+with check (
+  auth.uid() = user_id
+  and (
+    order_type = 'sell'
+    or (
+      order_type = 'buy'
+      and flags_amount is not null
+      and flags_amount <= (
+        coalesce(
+          (
+            select w.liquid_flags
+            from public.wallets w
+            where w.user_id = auth.uid()
+          ),
+          0::numeric
+        )
+        - coalesce(
+          (
+            select sum(o.flags_amount)
+            from public.orders o
+            where o.user_id = auth.uid()
+              and o.order_type = 'buy'
+              and o.status = 'pending'
+          ),
+          0::numeric
+        )
+      )
+    )
+  )
+);
 drop policy if exists ledger_select_own on public.wallet_ledger;
 create policy ledger_select_own on public.wallet_ledger for select using (auth.uid() = user_id);
 drop policy if exists metrics_select_own on public.daily_user_metrics;

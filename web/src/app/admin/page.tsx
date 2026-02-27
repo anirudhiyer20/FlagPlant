@@ -48,6 +48,9 @@ export default function AdminPage() {
       <p>
         <Link href="/vote">Go to Vote</Link>
       </p>
+      <p>
+        <Link href="/orders">Go to My Orders</Link>
+      </p>
       <RequireAuth>{(session) => <AdminPanel userId={session.user.id} />}</RequireAuth>
     </main>
   );

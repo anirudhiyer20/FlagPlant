@@ -54,6 +54,9 @@ export default function VotePage() {
       <p>
         <Link href="/admin">Go to Admin</Link>
       </p>
+      <p>
+        <Link href="/orders">Go to My Orders</Link>
+      </p>
       <RequireAuth>{(session) => <VotePanel userId={session.user.id} />}</RequireAuth>
     </main>
   );

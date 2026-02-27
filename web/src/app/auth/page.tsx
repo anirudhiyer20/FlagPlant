@@ -8,7 +8,7 @@ type Mode = "signup" | "login";
 
 export default function AuthPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
-  const [mode, setMode] = useState<Mode>("signup");
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -90,6 +90,9 @@ export default function AuthPage() {
       </p>
       <p>
         <Link href="/players">Go to Players</Link>
+      </p>
+      <p>
+        <Link href="/orders">Go to My Orders</Link>
       </p>
 
       <div className="card">
