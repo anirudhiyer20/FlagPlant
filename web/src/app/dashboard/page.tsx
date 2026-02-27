@@ -1,0 +1,285 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import RequireAuth from "@/components/require-auth";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { formatFlagAmount } from "@/lib/format";
+
+type ProfileRow = {
+  username: string;
+  email: string;
+  role: "user" | "admin";
+};
+
+type WalletRow = {
+  liquid_flags: number;
+};
+
+type OpinionRow = {
+  body: string;
+  created_at: string;
+};
+
+type WinnerRow = {
+  winner_date: string;
+  rank: number;
+  reward_flags: number;
+  votes_received: number;
+};
+
+type DashboardData = {
+  profile: ProfileRow | null;
+  wallet: WalletRow | null;
+  todayOpinion: OpinionRow | null;
+  assignmentsCount: number;
+  votesCount: number;
+  latestWinner: WinnerRow | null;
+};
+
+function todayString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export default function DashboardPage() {
+  return (
+    <main>
+      <h1>Dashboard</h1>
+      <p>
+        <Link href="/">Back to Home</Link>
+      </p>
+      <p>
+        <Link href="/opinion">Go to Daily Opinion</Link>
+      </p>
+      <p>
+        <Link href="/vote">Go to Vote</Link>
+      </p>
+      <p>
+        <Link href="/players">Go to Players</Link>
+      </p>
+      <p>
+        <Link href="/admin">Go to Admin</Link>
+      </p>
+      <RequireAuth>{(session) => <DashboardPanel userId={session.user.id} />}</RequireAuth>
+    </main>
+  );
+}
+
+function DashboardPanel({ userId }: { userId: string }) {
+  const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [data, setData] = useState<DashboardData>({
+    profile: null,
+    wallet: null,
+    todayOpinion: null,
+    assignmentsCount: 0,
+    votesCount: 0,
+    latestWinner: null
+  });
+  const dashboardDate = useMemo(() => todayString(), []);
+
+  const loadDashboard = useCallback(async () => {
+    setBusy(true);
+    setError("");
+
+    const profileQuery = supabase
+      .from("profiles")
+      .select("username,email,role")
+      .eq("id", userId)
+      .single();
+    const walletQuery = supabase
+      .from("wallets")
+      .select("liquid_flags")
+      .eq("user_id", userId)
+      .single();
+    const opinionQuery = supabase
+      .from("opinions")
+      .select("body,created_at")
+      .eq("user_id", userId)
+      .eq("submitted_for_date", dashboardDate)
+      .maybeSingle();
+    const assignmentsQuery = supabase
+      .from("opinion_assignments")
+      .select("id", { count: "exact", head: true })
+      .eq("viewer_user_id", userId)
+      .eq("assigned_for_date", dashboardDate);
+    const votesQuery = supabase
+      .from("opinion_votes")
+      .select("id", { count: "exact", head: true })
+      .eq("voter_user_id", userId)
+      .eq("assigned_for_date", dashboardDate);
+    const latestWinnerQuery = supabase
+      .from("daily_winners")
+      .select("winner_date,rank,reward_flags,votes_received")
+      .eq("user_id", userId)
+      .order("winner_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const [
+      profileResult,
+      walletResult,
+      opinionResult,
+      assignmentsResult,
+      votesResult,
+      latestWinnerResult
+    ] = await Promise.all([
+      profileQuery,
+      walletQuery,
+      opinionQuery,
+      assignmentsQuery,
+      votesQuery,
+      latestWinnerQuery
+    ]);
+
+    if (profileResult.error) {
+      setError(profileResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+    if (walletResult.error) {
+      setError(walletResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+    if (opinionResult.error) {
+      setError(opinionResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+    if (assignmentsResult.error) {
+      setError(assignmentsResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+    if (votesResult.error) {
+      setError(votesResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+    if (latestWinnerResult.error) {
+      setError(latestWinnerResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+
+    setData({
+      profile: (profileResult.data as ProfileRow | null) ?? null,
+      wallet: (walletResult.data as WalletRow | null) ?? null,
+      todayOpinion: (opinionResult.data as OpinionRow | null) ?? null,
+      assignmentsCount: assignmentsResult.count ?? 0,
+      votesCount: votesResult.count ?? 0,
+      latestWinner: (latestWinnerResult.data as WinnerRow | null) ?? null
+    });
+
+    setBusy(false);
+    setLoading(false);
+  }, [dashboardDate, supabase, userId]);
+
+  useEffect(() => {
+    loadDashboard().catch((loadError: unknown) => {
+      const message =
+        loadError instanceof Error ? loadError.message : "Unknown dashboard error";
+      setError(message);
+      setLoading(false);
+      setBusy(false);
+    });
+  }, [loadDashboard]);
+
+  return (
+    <div className="grid">
+      <div className="card">
+        <h2>Today</h2>
+        <p className="muted">Local app date: {dashboardDate}</p>
+        <button type="button" onClick={loadDashboard} disabled={busy}>
+          {busy ? "Refreshing..." : "Refresh dashboard"}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="card">
+          <p>Loading dashboard...</p>
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="card">
+          <p className="error">{error}</p>
+        </div>
+      ) : null}
+
+      {!loading && !error ? (
+        <>
+          <div className="card">
+            <h2>Account</h2>
+            <p>
+              Username: <strong>{data.profile?.username ?? "--"}</strong>
+            </p>
+            <p>Email: {data.profile?.email ?? "--"}</p>
+            <p>Role: {data.profile?.role ?? "--"}</p>
+          </div>
+
+          <div className="card">
+            <h2>Wallet</h2>
+            <p>
+              Liquid flags:{" "}
+              <strong>{formatFlagAmount(data.wallet?.liquid_flags)}</strong>
+            </p>
+          </div>
+
+          <div className="card">
+            <h2>Opinion Status</h2>
+            {data.todayOpinion ? (
+              <>
+                <p className="success">Submitted for today.</p>
+                <p>{data.todayOpinion.body}</p>
+              </>
+            ) : (
+              <p className="muted">Not submitted for today yet.</p>
+            )}
+          </div>
+
+          <div className="card">
+            <h2>Voting Status</h2>
+            <p>Assignments: {data.assignmentsCount}</p>
+            <p>Votes cast: {data.votesCount}</p>
+            <p>
+              Completion:{" "}
+              {data.assignmentsCount > 0
+                ? `${data.votesCount}/${data.assignmentsCount}`
+                : "0/0"}
+            </p>
+          </div>
+
+          <div className="card">
+            <h2>Latest Winner Result</h2>
+            {data.latestWinner ? (
+              <>
+                <p>Date: {data.latestWinner.winner_date}</p>
+                <p>Rank: {data.latestWinner.rank}</p>
+                <p>Votes: {data.latestWinner.votes_received}</p>
+                <p>
+                  Reward flags: {formatFlagAmount(data.latestWinner.reward_flags)}
+                </p>
+              </>
+            ) : (
+              <p className="muted">No winner result yet for this account.</p>
+            )}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}

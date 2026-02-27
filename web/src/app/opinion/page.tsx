@@ -27,6 +27,9 @@ export default function OpinionPage() {
         <Link href="/">Back to Home</Link>
       </p>
       <p>
+        <Link href="/dashboard">Go to Dashboard</Link>
+      </p>
+      <p>
         <Link href="/players">Go to Players</Link>
       </p>
       <p>

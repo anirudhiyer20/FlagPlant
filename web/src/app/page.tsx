@@ -6,13 +6,15 @@ export default function HomePage() {
       <h1>FlagPlant Phase 2 Starter</h1>
       <p className="muted">
         Your Supabase database is live. This app now includes auth, protected
-        pages, a daily opinion submit flow, and a live players list.
+        pages, a daily opinion submit flow, voting, winner admin tools, and a
+        live players list.
       </p>
 
       <div className="card">
         <h2>Next Actions</h2>
         <ol>
           <li>Open auth and log in.</li>
+          <li>Open dashboard and confirm your wallet/opinion/vote status.</li>
           <li>Open daily opinion and submit once for today.</li>
           <li>Open vote and cast votes on assigned opinions.</li>
           <li>Open admin and preview/publish winners.</li>
@@ -24,6 +26,9 @@ export default function HomePage() {
         <h2>Pages</h2>
         <p>
           <Link href="/auth">Go to Auth</Link>
+        </p>
+        <p>
+          <Link href="/dashboard">Go to Dashboard</Link>
         </p>
         <p>
           <Link href="/opinion">Go to Daily Opinion</Link>

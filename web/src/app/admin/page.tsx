@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { formatFlagAmount } from "@/lib/format";
 
 type WinnerRow = {
   rank: number;
@@ -40,6 +41,9 @@ export default function AdminPage() {
       <h1>Admin</h1>
       <p>
         <Link href="/">Back to Home</Link>
+      </p>
+      <p>
+        <Link href="/dashboard">Go to Dashboard</Link>
       </p>
       <p>
         <Link href="/vote">Go to Vote</Link>
@@ -214,7 +218,7 @@ function AdminPanel({ userId }: { userId: string }) {
                 <td>{row.rank}</td>
                 <td>{row.username ?? row.user_id}</td>
                 <td>{row.votes_received}</td>
-                <td>{row.reward_flags}</td>
+                <td>{formatFlagAmount(row.reward_flags)}</td>
               </tr>
             ))}
           </tbody>
@@ -240,7 +244,7 @@ function AdminPanel({ userId }: { userId: string }) {
                 <td>{row.rank}</td>
                 <td>{row.user_id}</td>
                 <td>{row.votes_received}</td>
-                <td>{row.reward_flags}</td>
+                <td>{formatFlagAmount(row.reward_flags)}</td>
               </tr>
             ))}
           </tbody>

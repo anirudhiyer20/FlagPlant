@@ -43,6 +43,9 @@ export default function VotePage() {
         <Link href="/">Back to Home</Link>
       </p>
       <p>
+        <Link href="/dashboard">Go to Dashboard</Link>
+      </p>
+      <p>
         <Link href="/opinion">Go to Daily Opinion</Link>
       </p>
       <p>

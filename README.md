@@ -101,6 +101,7 @@ A starter Next.js app now exists in `web/` with:
 
 - Home page (`/`)
 - Auth page (`/auth`) for signup/login
+- User dashboard (`/dashboard`) for wallet/opinion/vote status
 - Daily opinion page (`/opinion`) with one submission per user/day
 - Vote page (`/vote`) for assigned-opinion voting
 - Admin page (`/admin`) for winner preview/publish (admin users only)
@@ -152,14 +153,16 @@ Open http://localhost:3000
    - one row in `public.profiles`
    - one row in `public.wallets`
    - `wallets.liquid_flags = 100`
-3. Open `/opinion` with at least two users and submit one opinion each.
-4. Run `supabase/dev_seed_vote_assignments.sql` in Supabase SQL Editor.
-5. Open `/vote` for one of those users and cast a vote.
-6. Confirm one row appears in `public.opinion_votes`.
-7. Try voting the same opinion again and confirm it is blocked.
-8. Open `/admin` as your admin account, preview winners, then publish winners.
-9. Confirm rows appear in `public.daily_winners` and reward entries in `public.wallet_ledger`.
-10. Open `/players` and confirm list loads (50 players).
+3. Open `/dashboard` and confirm wallet/opinion/vote sections load for logged-in user.
+4. Open `/opinion` with at least two users and submit one opinion each.
+5. Run `supabase/dev_seed_vote_assignments.sql` in Supabase SQL Editor.
+6. Open `/vote` for one of those users and cast a vote.
+7. Confirm one row appears in `public.opinion_votes`.
+8. Try voting the same opinion again and confirm it is blocked.
+9. Open `/admin` as your admin account, preview winners, then publish winners.
+10. Confirm rows appear in `public.daily_winners` and reward entries in `public.wallet_ledger`.
+11. Refresh `/dashboard` and confirm latest winner result appears for rewarded users.
+12. Open `/players` and confirm list loads (50 players).
 
 ---
 
