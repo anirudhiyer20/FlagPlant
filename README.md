@@ -138,6 +138,7 @@ Also run `supabase/patch_portfolio_persistence.sql` once to add persistent end-o
 Also run `supabase/patch_follows.sql` once to add follow/unfollow social graph RPCs.
 Also run `supabase/patch_daily_close.sql` once to add one-click admin daily-close pipeline RPC.
 Also run `supabase/patch_manual_price_override.sql` once to add admin manual player price override RPC.
+Also run `supabase/patch_admin_diagnostics.sql` once to add admin diagnostics RPCs for daily-close health, job logs, and recent order-execution activity.
 
 ### Existing Project Patch Order (Recommended)
 
@@ -161,6 +162,7 @@ Run in Supabase SQL Editor in this order:
 16. `supabase/patch_follows.sql`
 17. `supabase/patch_daily_close.sql`
 18. `supabase/patch_manual_price_override.sql`
+19. `supabase/patch_admin_diagnostics.sql`
 
 ### SQL Smoke Tests
 
