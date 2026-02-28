@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuthSession } from "@/components/session-provider";
 import { CardSkeleton } from "@/components/ui-skeletons";
@@ -9,10 +9,23 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Mode = "signup" | "login";
 
+function getSafeNextPath(nextParam: string | null): string | null {
+  if (!nextParam) return null;
+  if (!nextParam.startsWith("/")) return null;
+  if (nextParam.startsWith("//")) return null;
+  if (nextParam.startsWith("/auth")) return null;
+  return nextParam;
+}
+
 export default function AuthPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { session, loading: sessionLoading } = useAuthSession();
+  const nextPath = useMemo(
+    () => getSafeNextPath(searchParams.get("next")),
+    [searchParams]
+  );
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,9 +36,9 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (!sessionLoading && session) {
-      router.replace("/dashboard");
+      router.replace(nextPath ?? "/dashboard");
     }
-  }, [router, session, sessionLoading]);
+  }, [nextPath, router, session, sessionLoading]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,7 +59,7 @@ export default function AuthPage() {
         if (signUpError) throw signUpError;
         const { data: sessionData } = await supabase.auth.getSession();
         if (sessionData.session) {
-          router.replace("/dashboard");
+          router.replace(nextPath ?? "/dashboard");
           return;
         }
 
@@ -57,7 +70,7 @@ export default function AuthPage() {
           password
         });
         if (signInError) throw signInError;
-        router.replace("/dashboard");
+        router.replace(nextPath ?? "/dashboard");
         return;
       }
     } catch (submitError) {
@@ -86,6 +99,9 @@ export default function AuthPage() {
         Beta notice: Please use a funny fake password while we test
         security/privacy features.
       </p>
+      {nextPath ? (
+        <p className="muted">After sign in, you&apos;ll return to {nextPath}.</p>
+      ) : null}
 
       <div className="card">
         <h2>{mode === "signup" ? "Create account" : "Sign in"}</h2>

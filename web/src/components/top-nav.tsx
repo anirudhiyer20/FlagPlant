@@ -119,6 +119,19 @@ export default function TopNav() {
     router.refresh();
   }
 
+  function getAuthHrefWithReturnPath(): string {
+    const currentPath =
+      typeof window !== "undefined"
+        ? `${window.location.pathname}${window.location.search}`
+        : pathname;
+
+    if (!currentPath || currentPath === "/" || currentPath.startsWith("/auth")) {
+      return "/auth";
+    }
+
+    return `/auth?next=${encodeURIComponent(currentPath)}`;
+  }
+
   return (
     <nav className="top-nav" aria-label="Primary">
       {items.map((item) => {
@@ -164,7 +177,7 @@ export default function TopNav() {
         <button
           type="button"
           className="nav-signout"
-          onClick={() => router.push("/auth")}
+          onClick={() => router.push(getAuthHrefWithReturnPath())}
         >
           Sign in
         </button>

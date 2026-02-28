@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { ReactNode } from "react";
 import { Session } from "@supabase/supabase-js";
 import AuthStateGate from "@/components/auth-state-gate";
@@ -12,6 +13,16 @@ type RequireAuthProps = {
 };
 
 export default function RequireAuth({ children }: RequireAuthProps) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentPath = `${pathname}${
+    searchParams.toString().length > 0 ? `?${searchParams.toString()}` : ""
+  }`;
+  const authHref =
+    currentPath.length > 0 && currentPath !== "/" && !currentPath.startsWith("/auth")
+      ? `/auth?next=${encodeURIComponent(currentPath)}`
+      : "/auth";
+
   return (
     <AuthStateGate
       onLoading={() => (
@@ -23,7 +34,7 @@ export default function RequireAuth({ children }: RequireAuthProps) {
       onSignedOut={() => (
         <p className="muted">
           Sign in from the top-right navigation button to access this page, or{" "}
-          <Link href="/auth">open Auth</Link>.
+          <Link href={authHref}>open Auth</Link>.
         </p>
       )}
       onSignedIn={(session) => children(session)}
