@@ -106,6 +106,9 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
   const [sellAmount, setSellAmount] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [cancelMessage, setCancelMessage] = useState("");
+  const [cancelError, setCancelError] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -400,6 +403,34 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
     setBusy(false);
   }
 
+  async function cancelPendingOrder(orderId: string) {
+    setCancellingOrderId(orderId);
+    setCancelError("");
+    setCancelMessage("");
+
+    const { data, error: cancelRpcError } = await supabase.rpc("cancel_pending_order", {
+      target_order_id: orderId
+    });
+
+    if (cancelRpcError) {
+      setCancelError(cancelRpcError.message);
+      setCancellingOrderId(null);
+      return;
+    }
+
+    const row = ((data ?? []) as { result_deleted?: boolean }[])[0];
+    if (!row?.result_deleted) {
+      setCancelError("Order could not be cancelled. It may already be processed.");
+      setCancellingOrderId(null);
+      await loadData();
+      return;
+    }
+
+    setCancelMessage("Pending order cancelled.");
+    await loadData();
+    setCancellingOrderId(null);
+  }
+
   if (loading) {
     return (
       <div className="card">
@@ -517,6 +548,8 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
 
       <div className="card">
         <h2>Recent Orders</h2>
+        {cancelMessage ? <p className="success">{cancelMessage}</p> : null}
+        {cancelError ? <p className="error">{cancelError}</p> : null}
         {orders.length === 0 ? (
           <p className="muted">No orders yet.</p>
         ) : (
@@ -528,6 +561,7 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
                 <th>Status</th>
                 <th>Flags</th>
                 <th>Units</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -545,6 +579,22 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
                     {order.units_amount === null
                       ? "--"
                       : formatTwoDecimals(order.units_amount)}
+                  </td>
+                  <td>
+                    {order.status === "pending" ? (
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={cancellingOrderId === order.id}
+                        onClick={() => {
+                          void cancelPendingOrder(order.id);
+                        }}
+                      >
+                        {cancellingOrderId === order.id ? "Cancelling..." : "Cancel"}
+                      </button>
+                    ) : (
+                      "--"
+                    )}
                   </td>
                 </tr>
               ))}

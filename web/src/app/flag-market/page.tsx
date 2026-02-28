@@ -46,6 +46,7 @@ type OrderViewRow = OrderRow & {
 };
 
 type TabKey = "available_players" | "my_orders";
+type RecentOrderFilter = "executed" | "failed" | "all";
 
 export default function FlagMarketPage() {
   return (
@@ -192,6 +193,7 @@ function OrdersPanel({ userId }: { userId: string }) {
   const [recentOrders, setRecentOrders] = useState<OrderViewRow[]>([]);
   const [recentPage, setRecentPage] = useState(1);
   const [recentTotalCount, setRecentTotalCount] = useState(0);
+  const [recentFilter, setRecentFilter] = useState<RecentOrderFilter>("executed");
   const [loading, setLoading] = useState(true);
   const [pendingBusy, setPendingBusy] = useState(false);
   const [recentBusy, setRecentBusy] = useState(false);
@@ -264,7 +266,7 @@ function OrdersPanel({ userId }: { userId: string }) {
   }, [enrichOrdersWithPlayerNames, supabase, userId]);
 
   const loadRecentOrders = useCallback(
-    async (page: number) => {
+    async (page: number, filter: RecentOrderFilter = recentFilter) => {
       setRecentBusy(true);
       setError("");
 
@@ -272,16 +274,23 @@ function OrdersPanel({ userId }: { userId: string }) {
       const from = (clampedPage - 1) * pageSize;
       const to = from + pageSize - 1;
 
-      const { data: orderData, error: orderError, count } = await supabase
+      let query = supabase
         .from("orders")
         .select(
           "id,player_id,order_type,status,flags_amount,units_amount,trade_date,created_at",
           { count: "exact" }
         )
         .eq("user_id", userId)
-        .eq("status", "executed")
         .order("created_at", { ascending: false })
         .range(from, to);
+
+      if (filter === "all") {
+        query = query.in("status", ["executed", "failed"]);
+      } else {
+        query = query.eq("status", filter);
+      }
+
+      const { data: orderData, error: orderError, count } = await query;
 
       if (orderError) {
         setError(orderError.message);
@@ -304,12 +313,12 @@ function OrdersPanel({ userId }: { userId: string }) {
 
       setRecentBusy(false);
     },
-    [enrichOrdersWithPlayerNames, supabase, userId]
+    [enrichOrdersWithPlayerNames, recentFilter, supabase, userId]
   );
 
   const refreshOrders = useCallback(async () => {
-    await Promise.all([loadPendingOrders(), loadRecentOrders(recentPage)]);
-  }, [loadPendingOrders, loadRecentOrders, recentPage]);
+    await Promise.all([loadPendingOrders(), loadRecentOrders(recentPage, recentFilter)]);
+  }, [loadPendingOrders, loadRecentOrders, recentFilter, recentPage]);
 
   const cancelPendingOrder = useCallback(
     async (orderId: string) => {
@@ -336,15 +345,18 @@ function OrdersPanel({ userId }: { userId: string }) {
       }
 
       setMessage("Pending order cancelled.");
-      await Promise.all([loadPendingOrders(), loadRecentOrders(recentPage)]);
+      await Promise.all([
+        loadPendingOrders(),
+        loadRecentOrders(recentPage, recentFilter)
+      ]);
       setCancellingOrderId(null);
     },
-    [loadPendingOrders, loadRecentOrders, recentPage, supabase]
+    [loadPendingOrders, loadRecentOrders, recentFilter, recentPage, supabase]
   );
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([loadPendingOrders(), loadRecentOrders(1)])
+    Promise.all([loadPendingOrders(), loadRecentOrders(1, recentFilter)])
       .catch((loadError: unknown) => {
         const msg = loadError instanceof Error ? loadError.message : "Unknown load error";
         setError(msg);
@@ -352,7 +364,12 @@ function OrdersPanel({ userId }: { userId: string }) {
       .finally(() => {
         setLoading(false);
       });
-  }, [loadPendingOrders, loadRecentOrders]);
+  }, [loadPendingOrders, loadRecentOrders, recentFilter]);
+
+  function onRecentFilterChange(nextFilter: RecentOrderFilter) {
+    setRecentFilter(nextFilter);
+    setRecentPage(1);
+  }
 
   return (
     <div className="grid">
@@ -437,11 +454,38 @@ function OrdersPanel({ userId }: { userId: string }) {
       <div className="card">
         <h2>Recent Orders</h2>
         <p className="muted">
-          Showing Executed Order History In Pages Of 10. Page {recentPage} Of {totalPages}
+          Showing {recentFilter === "all" ? "All Processed" : recentFilter} order history
+          in pages of 10. Page {recentPage} of {totalPages}.
         </p>
+        <div className="tab-row">
+          <button
+            type="button"
+            onClick={() => onRecentFilterChange("executed")}
+            className={recentFilter === "executed" ? "" : "secondary"}
+            disabled={recentBusy}
+          >
+            Executed
+          </button>
+          <button
+            type="button"
+            onClick={() => onRecentFilterChange("failed")}
+            className={recentFilter === "failed" ? "" : "secondary"}
+            disabled={recentBusy}
+          >
+            Failed
+          </button>
+          <button
+            type="button"
+            onClick={() => onRecentFilterChange("all")}
+            className={recentFilter === "all" ? "" : "secondary"}
+            disabled={recentBusy}
+          >
+            All Processed
+          </button>
+        </div>
 
         {!loading && !error && recentOrders.length === 0 ? (
-          <EmptyState message="No executed orders yet." />
+          <EmptyState message="No orders found for this filter." />
         ) : null}
 
         {!loading && !error && recentOrders.length > 0 ? (
