@@ -1,6 +1,14 @@
 -- Patch for existing projects:
 -- adds admin RPCs for pending buy/sell order preview and execution.
 
+create or replace function public.app_current_date_est()
+returns date
+language sql
+stable
+as $$
+  select (now() at time zone 'America/New_York')::date
+$$;
+
 alter table public.orders
 drop constraint if exists orders_check;
 
@@ -35,7 +43,7 @@ check (
 delete from public.holdings
 where units <= 0.005::numeric;
 
-create or replace function public.admin_preview_pending_buy_orders(target_date date default current_date)
+create or replace function public.admin_preview_pending_buy_orders(target_date date default public.app_current_date_est())
 returns table (
   result_user_id uuid,
   result_username text,
@@ -65,7 +73,7 @@ begin
 end;
 $$;
 
-create or replace function public.admin_preview_pending_sell_orders(target_date date default current_date)
+create or replace function public.admin_preview_pending_sell_orders(target_date date default public.app_current_date_est())
 returns table (
   result_user_id uuid,
   result_username text,
@@ -98,7 +106,7 @@ begin
 end;
 $$;
 
-create or replace function public.admin_execute_pending_buy_orders(target_date date default current_date)
+create or replace function public.admin_execute_pending_buy_orders(target_date date default public.app_current_date_est())
 returns table (
   result_order_id uuid,
   result_user_id uuid,
@@ -294,7 +302,7 @@ begin
 end;
 $$;
 
-create or replace function public.admin_execute_pending_sell_orders(target_date date default current_date)
+create or replace function public.admin_execute_pending_sell_orders(target_date date default public.app_current_date_est())
 returns table (
   result_order_id uuid,
   result_user_id uuid,

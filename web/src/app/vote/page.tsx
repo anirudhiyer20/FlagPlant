@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getEasternDateString } from "@/lib/dates";
 
 type AssignmentRow = {
   id: string;
@@ -26,14 +27,6 @@ type VoteItem = {
   assignedForDate: string;
   body: string;
 };
-
-function todayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 export default function VotePage() {
   return (
@@ -70,7 +63,7 @@ function VotePanel({ userId }: { userId: string }) {
   const [busyOpinionId, setBusyOpinionId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const voteDate = useMemo(() => todayString(), []);
+  const voteDate = useMemo(() => getEasternDateString(), []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -185,7 +178,8 @@ function VotePanel({ userId }: { userId: string }) {
 
   return (
     <div className="card">
-      <p className="muted">Voting date: {voteDate}</p>
+      <p className="muted">Voting date (ET): {voteDate}</p>
+      <p className="muted">You are voting on opinions submitted yesterday (ET).</p>
       <p className="muted">
         Votes cast: {votedCount}/{totalCount}
       </p>

@@ -1,20 +1,52 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Mode = "signup" | "login";
 
 export default function AuthPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      setSessionUserId(data.session?.user.id ?? null);
+      setSessionChecked(true);
+    });
+
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSessionUserId(session?.user.id ?? null);
+      setSessionChecked(true);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase.auth]);
+
+  useEffect(() => {
+    if (sessionUserId && mode === "login") {
+      setMode("signup");
+    }
+  }, [mode, sessionUserId]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -33,16 +65,21 @@ export default function AuthPage() {
         });
 
         if (signUpError) throw signUpError;
-        setMessage(
-          "Signup sent. If email confirmation is enabled in Supabase, check your inbox before login."
-        );
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionUserId && sessionData.session) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        setMessage("Signup sent. Check your inbox to confirm email before login.");
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password
         });
         if (signInError) throw signInError;
-        setMessage("Logged in successfully.");
+        router.replace("/dashboard");
+        return;
       }
     } catch (submitError) {
       const errorMessage =
@@ -61,10 +98,23 @@ export default function AuthPage() {
     if (signOutError) {
       setError(signOutError.message);
     } else {
+      setSessionUserId(null);
+      setMode("login");
       setMessage("Signed out.");
     }
     setBusy(false);
   }
+
+  if (!sessionChecked) {
+    return (
+      <main>
+        <h1>Auth</h1>
+        <p>Loading...</p>
+      </main>
+    );
+  }
+
+  const isLoggedIn = sessionUserId !== null;
 
   return (
     <main>
@@ -73,27 +123,11 @@ export default function AuthPage() {
         Beta notice: Please use a funny fake password while we test
         security/privacy features.
       </p>
-      <p>
-        <Link href="/">Back to Home</Link>
-      </p>
-      <p>
-        <Link href="/dashboard">Go to Dashboard</Link>
-      </p>
-      <p>
-        <Link href="/opinion">Go to Daily Opinion</Link>
-      </p>
-      <p>
-        <Link href="/vote">Go to Vote</Link>
-      </p>
-      <p>
-        <Link href="/admin">Go to Admin</Link>
-      </p>
-      <p>
-        <Link href="/players">Go to Players</Link>
-      </p>
-      <p>
-        <Link href="/orders">Go to My Orders</Link>
-      </p>
+      {isLoggedIn ? (
+        <p>
+          <Link href="/">Back to Home</Link>
+        </p>
+      ) : null}
 
       <div className="card">
         <h2>{mode === "signup" ? "Create account" : "Sign in"}</h2>
@@ -140,17 +174,21 @@ export default function AuthPage() {
                   ? "Sign up"
                   : "Sign in"}
             </button>
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setMode(mode === "signup" ? "login" : "signup")}
-              disabled={busy}
-            >
-              Switch to {mode === "signup" ? "login" : "signup"}
-            </button>
-            <button type="button" onClick={onSignOut} disabled={busy}>
-              Sign out
-            </button>
+            {!isLoggedIn ? (
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setMode(mode === "signup" ? "login" : "signup")}
+                disabled={busy}
+              >
+                Switch to {mode === "signup" ? "login" : "signup"}
+              </button>
+            ) : null}
+            {isLoggedIn ? (
+              <button type="button" onClick={onSignOut} disabled={busy}>
+                Sign out
+              </button>
+            ) : null}
           </div>
         </form>
 

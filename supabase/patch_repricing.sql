@@ -1,7 +1,15 @@
 -- Patch for existing projects:
 -- adds admin RPCs for player repricing based on executed order flow.
 
-create or replace function public.admin_preview_player_repricing(target_date date default current_date)
+create or replace function public.app_current_date_est()
+returns date
+language sql
+stable
+as $$
+  select (now() at time zone 'America/New_York')::date
+$$;
+
+create or replace function public.admin_preview_player_repricing(target_date date default public.app_current_date_est())
 returns table (
   result_player_id uuid,
   result_player_name text,
@@ -113,7 +121,7 @@ begin
 end;
 $$;
 
-create or replace function public.admin_apply_player_repricing(target_date date default current_date)
+create or replace function public.admin_apply_player_repricing(target_date date default public.app_current_date_est())
 returns table (
   result_player_id uuid,
   result_player_name text,

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
+import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -95,13 +96,23 @@ type RepricingRow = {
   result_price_multiplier: number;
 };
 
-function todayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+type DailyCloseStepRow = {
+  result_step: string;
+  result_status: string;
+  result_detail: string;
+  result_count: number;
+};
+
+type DailyCloseStepRawRow = {
+  result_step?: string;
+  result_status?: string;
+  result_detail?: string;
+  result_count?: number;
+  step?: string;
+  status?: string;
+  detail?: string;
+  count?: number;
+};
 
 export default function AdminPage() {
   return (
@@ -126,7 +137,7 @@ export default function AdminPage() {
 
 function AdminPanel({ userId }: { userId: string }) {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
-  const [selectedDate, setSelectedDate] = useState(todayString());
+  const [selectedDate, setSelectedDate] = useState(getEasternDateString());
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [loadingRole, setLoadingRole] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -134,6 +145,7 @@ function AdminPanel({ userId }: { userId: string }) {
   const [executingOrders, setExecutingOrders] = useState(false);
   const [executingSellOrders, setExecutingSellOrders] = useState(false);
   const [repricingBusy, setRepricingBusy] = useState(false);
+  const [dailyCloseBusy, setDailyCloseBusy] = useState(false);
   const [previewRows, setPreviewRows] = useState<WinnerRow[]>([]);
   const [publishedRows, setPublishedRows] = useState<PublishedRow[]>([]);
   const [pendingOrderSummaryRows, setPendingOrderSummaryRows] = useState<
@@ -145,6 +157,7 @@ function AdminPanel({ userId }: { userId: string }) {
   const [buyExecutionRows, setBuyExecutionRows] = useState<OrderExecutionRow[]>([]);
   const [sellExecutionRows, setSellExecutionRows] = useState<OrderExecutionRow[]>([]);
   const [repricingRows, setRepricingRows] = useState<RepricingRow[]>([]);
+  const [dailyCloseRows, setDailyCloseRows] = useState<DailyCloseStepRow[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -190,6 +203,37 @@ function AdminPanel({ userId }: { userId: string }) {
     }
 
     setPublishedRows((data ?? []) as PublishedRow[]);
+  }
+
+  async function runDailyClose() {
+    setDailyCloseBusy(true);
+    setMessage("");
+    setError("");
+
+    const { data, error: closeError } = await supabase.rpc("admin_run_daily_close", {
+      target_date: selectedDate
+    });
+
+    if (closeError) {
+      setError(closeError.message);
+      setDailyCloseRows([]);
+      setDailyCloseBusy(false);
+      return;
+    }
+
+    const mapped = ((data ?? []) as DailyCloseStepRawRow[]).map((row) => ({
+      result_step: row.result_step ?? row.step ?? "",
+      result_status: row.result_status ?? row.status ?? "",
+      result_detail: row.result_detail ?? row.detail ?? "",
+      result_count: row.result_count ?? row.count ?? 0
+    }));
+
+    setDailyCloseRows(mapped);
+    setMessage("Daily close pipeline completed.");
+    await loadPublishedForDate();
+    await loadPendingBuySummary();
+    await loadPendingSellSummary();
+    setDailyCloseBusy(false);
   }
 
   async function loadPreview() {
@@ -437,17 +481,64 @@ function AdminPanel({ userId }: { userId: string }) {
 
   return (
     <div className="card">
+      <h2>Daily Close Pipeline</h2>
+      <div className="grid">
+        <button
+          type="button"
+          className="secondary"
+          onClick={runDailyClose}
+          disabled={
+            dailyCloseBusy ||
+            loading ||
+            publishing ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy
+          }
+        >
+          {dailyCloseBusy ? "Running..." : "Run Daily Close (All Steps)"}
+        </button>
+      </div>
+      {dailyCloseRows.length === 0 ? (
+        <p className="muted">No daily-close run yet for selected date.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Step</th>
+              <th>Status</th>
+              <th>Detail</th>
+              <th>Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {dailyCloseRows.map((row, idx) => (
+              <tr key={`${row.result_step}-${idx}`}>
+                <td>{row.result_step}</td>
+                <td>{row.result_status}</td>
+                <td>{row.result_detail}</td>
+                <td>{row.result_count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
       <h2>Winner Tools</h2>
       <div className="grid">
         <label>
-          Target date
+          Target vote/close date (ET)
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
           />
         </label>
-        <button type="button" onClick={loadPreview} disabled={loading || publishing}>
+        <button
+          type="button"
+          onClick={loadPreview}
+          disabled={loading || publishing || dailyCloseBusy}
+        >
           {loading ? "Loading..." : "Preview Top 5"}
         </button>
         <button
@@ -459,7 +550,8 @@ function AdminPanel({ userId }: { userId: string }) {
             loading ||
             executingOrders ||
             executingSellOrders ||
-            repricingBusy
+            repricingBusy ||
+            dailyCloseBusy
           }
         >
           {publishing ? "Publishing..." : "Publish Winners"}
@@ -531,7 +623,8 @@ function AdminPanel({ userId }: { userId: string }) {
             publishing ||
             executingOrders ||
             executingSellOrders ||
-            repricingBusy
+            repricingBusy ||
+            dailyCloseBusy
           }
         >
           Preview Pending Buy Orders
@@ -545,7 +638,8 @@ function AdminPanel({ userId }: { userId: string }) {
             publishing ||
             executingOrders ||
             executingSellOrders ||
-            repricingBusy
+            repricingBusy ||
+            dailyCloseBusy
           }
         >
           {executingOrders ? "Executing..." : "Execute Pending Buy Orders"}
@@ -620,7 +714,8 @@ function AdminPanel({ userId }: { userId: string }) {
             publishing ||
             executingOrders ||
             executingSellOrders ||
-            repricingBusy
+            repricingBusy ||
+            dailyCloseBusy
           }
         >
           Preview Pending Sell Orders
@@ -634,7 +729,8 @@ function AdminPanel({ userId }: { userId: string }) {
             publishing ||
             executingOrders ||
             executingSellOrders ||
-            repricingBusy
+            repricingBusy ||
+            dailyCloseBusy
           }
         >
           {executingSellOrders ? "Executing..." : "Execute Pending Sell Orders"}
@@ -712,7 +808,8 @@ function AdminPanel({ userId }: { userId: string }) {
             publishing ||
             executingOrders ||
             executingSellOrders ||
-            repricingBusy
+            repricingBusy ||
+            dailyCloseBusy
           }
         >
           {repricingBusy ? "Working..." : "Preview Repricing"}
@@ -726,7 +823,8 @@ function AdminPanel({ userId }: { userId: string }) {
             publishing ||
             executingOrders ||
             executingSellOrders ||
-            repricingBusy
+            repricingBusy ||
+            dailyCloseBusy
           }
         >
           {repricingBusy ? "Working..." : "Apply Repricing"}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
+import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -48,14 +49,6 @@ type OrderRow = {
   trade_date: string;
   created_at: string;
 };
-
-function todayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 export default function PlayerDetailPage() {
   const params = useParams<{ id: string }>();
@@ -269,7 +262,7 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       player_id: player.id,
       order_type: "buy",
       flags_amount: parsed,
-      trade_date: todayString()
+      trade_date: getEasternDateString()
     });
 
     if (insertError) {
@@ -325,7 +318,7 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       order_type: "sell",
       flags_amount: parsedFlags,
       units_amount: estimatedUnits,
-      trade_date: todayString()
+      trade_date: getEasternDateString()
     });
 
     if (insertError) {

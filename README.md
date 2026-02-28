@@ -113,8 +113,10 @@ A starter Next.js app now exists in `web/` with:
 - Winner history page (`/winners`) for previous daily top-5 boards
 
 If you already set up Supabase before this update, run
-`supabase/patch_vote_policy.sql` once in Supabase SQL Editor to apply the latest
-RLS policy changes for voting reads.
+`supabase/patch_est_cadence_backfill.sql` once in Supabase SQL Editor to
+normalize existing opinion/vote date fields to ET cadence.
+Then run `supabase/patch_vote_policy.sql` once in Supabase SQL Editor to apply
+the latest ET/day-cadence RLS policy changes for voting reads/inserts.
 Also run `supabase/patch_admin_winners.sql` once to add admin winner RPC tools.
 Also run `supabase/patch_order_budget_policy.sql` once to enforce combined
 pending buy-order budget limits against wallet balance.
@@ -125,9 +127,50 @@ RPC tools (price updates based on executed order flow).
 Also run `supabase/patch_player_market_stats.sql` once to add player card market
 stats RPC (`holders` and `invested capital`).
 Also run `supabase/patch_leaderboard.sql` once to add leaderboard snapshot RPC.
+Also run `supabase/patch_leaderboard_scope.sql` once to add server-side friends-only leaderboard filtering RPC.
 Also run `supabase/patch_public_profiles.sql` once to add public profile view RPCs.
 Also run `supabase/patch_winner_history.sql` once to add winner-history RPC.
 Also run `supabase/patch_portfolio_history.sql` once to add portfolio history RPC for charting.
+Also run `supabase/patch_portfolio_persistence.sql` once to add persistent end-of-day portfolio snapshots and snapshot-backed history reads.
+Also run `supabase/patch_follows.sql` once to add follow/unfollow social graph RPCs.
+Also run `supabase/patch_daily_close.sql` once to add one-click admin daily-close pipeline RPC.
+
+### Existing Project Patch Order (Recommended)
+
+Run in Supabase SQL Editor in this order:
+
+1. `supabase/patch_est_cadence_backfill.sql`
+2. `supabase/patch_vote_policy.sql`
+3. `supabase/patch_admin_winners.sql`
+4. `supabase/patch_order_budget_policy.sql`
+5. `supabase/patch_order_execution.sql`
+6. `supabase/patch_repricing.sql`
+7. `supabase/patch_player_market_stats.sql`
+8. `supabase/patch_leaderboard.sql`
+9. `supabase/patch_leaderboard_scope.sql`
+10. `supabase/patch_public_profiles.sql`
+11. `supabase/patch_winner_history.sql`
+12. `supabase/patch_portfolio_history.sql`
+13. `supabase/patch_portfolio_persistence.sql`
+14. `supabase/patch_follows.sql`
+15. `supabase/patch_daily_close.sql`
+
+### SQL Smoke Tests
+
+- `supabase/smoke_01_daily_close_admin.sql`: validates admin context + daily close.
+- `supabase/smoke_02_vote_cadence_integrity.sql`: validates ET D->D+1 opinion/vote cadence.
+- `supabase/smoke_03_friends_leaderboard.sql`: validates global vs friends-only leaderboard scope.
+
+### Time Standard (ET)
+
+- App business dates are always Eastern Time via `public.app_current_date_est()`.
+- Cadence is fixed:
+  - Submit opinions on day D (ET)
+  - Vote on day D+1 (ET) for day D opinions
+  - Winners for vote date D+1 are computed from opinions submitted on D
+- `created_at`/`executed_at` are `timestamptz` and stored in UTC by Postgres (expected).
+  Convert to ET when displaying in UI or when deriving a business date.
+
 
 ### A) Install dependencies
 
@@ -189,6 +232,10 @@ Open http://localhost:3000
 19. Open `/leaderboard` and confirm users are ranked by total net worth.
 20. Click a leaderboard username and confirm `/profiles/[id]` shows only wallet, portfolio metrics, holdings, and latest winner + opinion.
 21. Open `/winners` and confirm prior top-5 boards show rank, name, opinion, and votes.
+22. Open another user profile and verify follow/unfollow updates follower/following counts and connection lists.
+23. On `/leaderboard`, toggle **Friends only** and confirm it shows only mutual follows (plus you).
+24. On `/admin`, run **Run Daily Close (All Steps)** and confirm step results are returned.
+25. In Supabase Table Editor, confirm `daily_user_portfolio_snapshots` and `daily_user_holding_snapshots` are populated for the close date.
 
 ---
 

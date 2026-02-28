@@ -43,6 +43,7 @@ export default function LeaderboardPage() {
 function LeaderboardPanel({ userId }: { userId: string }) {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<LeaderboardRow[]>([]);
+  const [showFriendsOnly, setShowFriendsOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -52,7 +53,10 @@ function LeaderboardPanel({ userId }: { userId: string }) {
     setError("");
 
     const { data, error: leaderboardError } = await supabase.rpc(
-      "get_leaderboard_snapshot"
+      "get_leaderboard_snapshot_scoped",
+      {
+        view_mode: showFriendsOnly ? "friends_only" : "global"
+      }
     );
 
     if (leaderboardError) {
@@ -66,7 +70,7 @@ function LeaderboardPanel({ userId }: { userId: string }) {
     setRows((data ?? []) as LeaderboardRow[]);
     setLoading(false);
     setBusy(false);
-  }, [supabase]);
+  }, [showFriendsOnly, supabase]);
 
   useEffect(() => {
     loadLeaderboard().catch((loadError: unknown) => {
@@ -83,6 +87,17 @@ function LeaderboardPanel({ userId }: { userId: string }) {
       <button type="button" onClick={loadLeaderboard} disabled={busy}>
         {busy ? "Refreshing..." : "Refresh Leaderboard"}
       </button>
+      <p>
+        <label>
+          <input
+            type="checkbox"
+            checked={showFriendsOnly}
+            onChange={(event) => setShowFriendsOnly(event.target.checked)}
+          />{" "}
+          Friends only
+        </label>
+      </p>
+      <p className="muted">Friends are mutual follows.</p>
 
       {loading ? <p>Loading leaderboard...</p> : null}
       {error ? <p className="error">{error}</p> : null}

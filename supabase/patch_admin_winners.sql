@@ -1,6 +1,14 @@
 -- Patch for existing projects:
 -- adds admin-only winner preview/publish RPC and reward ledger updates.
 
+create or replace function public.app_current_date_est()
+returns date
+language sql
+stable
+as $$
+  select (now() at time zone 'America/New_York')::date
+$$;
+
 create or replace function public.assert_admin()
 returns void
 language plpgsql
@@ -25,7 +33,7 @@ begin
 end;
 $$;
 
-create or replace function public.get_daily_winner_preview(target_date date default current_date)
+create or replace function public.get_daily_winner_preview(target_date date default public.app_current_date_est())
 returns table (
   rank int,
   user_id uuid,
@@ -38,8 +46,11 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  source_opinion_date date;
 begin
   perform public.assert_admin();
+  source_opinion_date := target_date - 1;
 
   return query
   with reward_schedule as (
@@ -64,7 +75,7 @@ begin
     left join public.opinion_votes v
       on v.opinion_id = o.id
       and v.assigned_for_date = target_date
-    where o.submitted_for_date = target_date
+    where o.submitted_for_date = source_opinion_date
       and o.status = 'active'
     group by o.id, o.user_id, o.created_at
   ),
@@ -110,7 +121,7 @@ begin
 end;
 $$;
 
-create or replace function public.admin_publish_daily_winners(target_date date default current_date)
+create or replace function public.admin_publish_daily_winners(target_date date default public.app_current_date_est())
 returns table (
   rank int,
   user_id uuid,

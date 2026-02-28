@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
+import { formatEasternDateTime } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -143,7 +144,7 @@ function OrdersPanel({ userId }: { userId: string }) {
           <tbody>
             {orders.map((order) => (
               <tr key={order.id}>
-                <td>{new Date(order.created_at).toLocaleString()}</td>
+                <td>{formatEasternDateTime(order.created_at)}</td>
                 <td>{order.trade_date}</td>
                 <td>
                   <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>

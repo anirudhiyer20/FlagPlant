@@ -4,20 +4,13 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import RequireAuth from "@/components/require-auth";
+import { getEasternDateString } from "@/lib/dates";
 
 type ExistingOpinion = {
   id: string;
   body: string;
   created_at: string;
 };
-
-function todayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 export default function OpinionPage() {
   return (
@@ -54,7 +47,7 @@ function OpinionForm({ userId }: { userId: string }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const submissionDate = useMemo(() => todayString(), []);
+  const submissionDate = useMemo(() => getEasternDateString(), []);
 
   useEffect(() => {
     async function loadTodayOpinion() {
@@ -125,7 +118,7 @@ function OpinionForm({ userId }: { userId: string }) {
 
   return (
     <div className="card">
-      <p className="muted">Submission date: {submissionDate}</p>
+      <p className="muted">Submission date (ET): {submissionDate}</p>
       {loading ? <p>Loading your opinion status...</p> : null}
       {message ? <p className="success">{message}</p> : null}
       {error ? <p className="error">{error}</p> : null}

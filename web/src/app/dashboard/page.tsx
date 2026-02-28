@@ -7,6 +7,7 @@ import PortfolioHistoryChart, {
   type PortfolioHistoryPoint
 } from "@/components/portfolio-history-chart";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 
 type ProfileRow = {
@@ -56,6 +57,20 @@ type HoldingViewRow = {
   unrealized_pnl: number;
 };
 
+type FollowStateRow = {
+  result_target_user_id: string;
+  result_is_following: boolean;
+  result_follows_you: boolean;
+  result_follower_count: number;
+  result_following_count: number;
+};
+
+type FollowListRow = {
+  result_user_id: string;
+  result_username: string;
+  result_followed_at: string;
+};
+
 type DashboardData = {
   profile: ProfileRow | null;
   wallet: WalletRow | null;
@@ -65,6 +80,9 @@ type DashboardData = {
   latestWinner: WinnerRow | null;
   holdings: HoldingViewRow[];
   portfolioHistory: PortfolioHistoryPoint[];
+  followState: FollowStateRow | null;
+  followers: FollowListRow[];
+  following: FollowListRow[];
 };
 
 type PortfolioHistoryRawRow = {
@@ -74,14 +92,6 @@ type PortfolioHistoryRawRow = {
   result_total_value_close: number;
   result_holdings_json: unknown;
 };
-
-function todayString(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
 
 function formatSignedFlag(value: number): string {
   if (value > 0) return `+${formatFlagAmount(value)}`;
@@ -161,9 +171,15 @@ function DashboardPanel({ userId }: { userId: string }) {
     votesCount: 0,
     latestWinner: null,
     holdings: [],
-    portfolioHistory: []
+    portfolioHistory: [],
+    followState: null,
+    followers: [],
+    following: []
   });
-  const dashboardDate = useMemo(() => todayString(), []);
+  const [activeConnectionList, setActiveConnectionList] = useState<
+    "followers" | "following" | "none"
+  >("none");
+  const dashboardDate = useMemo(() => getEasternDateString(), []);
 
   const loadDashboard = useCallback(async () => {
     setBusy(true);
@@ -211,6 +227,19 @@ function DashboardPanel({ userId }: { userId: string }) {
       target_user_id: userId,
       lookback_days: 30
     });
+    const followStateQuery = supabase.rpc("get_follow_state", {
+      target_user_id: userId
+    });
+    const followersQuery = supabase.rpc("get_follow_list", {
+      target_user_id: userId,
+      list_kind: "followers",
+      limit_count: 20
+    });
+    const followingQuery = supabase.rpc("get_follow_list", {
+      target_user_id: userId,
+      list_kind: "following",
+      limit_count: 20
+    });
 
     const [
       profileResult,
@@ -220,7 +249,10 @@ function DashboardPanel({ userId }: { userId: string }) {
       votesResult,
       latestWinnerResult,
       holdingsResult,
-      portfolioHistoryResult
+      portfolioHistoryResult,
+      followStateResult,
+      followersResult,
+      followingResult
     ] = await Promise.all([
       profileQuery,
       walletQuery,
@@ -229,7 +261,10 @@ function DashboardPanel({ userId }: { userId: string }) {
       votesQuery,
       latestWinnerQuery,
       holdingsQuery,
-      portfolioHistoryQuery
+      portfolioHistoryQuery,
+      followStateQuery,
+      followersQuery,
+      followingQuery
     ]);
 
     if (profileResult.error) {
@@ -276,6 +311,24 @@ function DashboardPanel({ userId }: { userId: string }) {
     }
     if (portfolioHistoryResult.error) {
       setError(portfolioHistoryResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+    if (followStateResult.error) {
+      setError(followStateResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+    if (followersResult.error) {
+      setError(followersResult.error.message);
+      setBusy(false);
+      setLoading(false);
+      return;
+    }
+    if (followingResult.error) {
+      setError(followingResult.error.message);
       setBusy(false);
       setLoading(false);
       return;
@@ -328,6 +381,10 @@ function DashboardPanel({ userId }: { userId: string }) {
       total_close: row.result_total_value_close ?? 0,
       holdings: parseHistoryHoldings(row.result_holdings_json)
     }));
+    const followStateRows = (followStateResult.data ?? []) as FollowStateRow[];
+    const followState = followStateRows[0] ?? null;
+    const followers = (followersResult.data ?? []) as FollowListRow[];
+    const following = (followingResult.data ?? []) as FollowListRow[];
 
     const latestWinnerRaw = (latestWinnerResult.data as Omit<
       WinnerRow,
@@ -365,7 +422,10 @@ function DashboardPanel({ userId }: { userId: string }) {
       votesCount: votesResult.count ?? 0,
       latestWinner,
       holdings,
-      portfolioHistory
+      portfolioHistory,
+      followState,
+      followers,
+      following
     });
 
     setBusy(false);
@@ -414,12 +474,18 @@ function DashboardPanel({ userId }: { userId: string }) {
     },
     null
   );
+  const activeConnectionRows =
+    activeConnectionList === "followers"
+      ? data.followers
+      : activeConnectionList === "following"
+        ? data.following
+        : [];
 
   return (
     <div className="grid">
       <div className="card">
         <h2>Today</h2>
-        <p className="muted">Local app date: {dashboardDate}</p>
+        <p className="muted">App date (ET): {dashboardDate}</p>
         <button type="button" onClick={loadDashboard} disabled={busy}>
           {busy ? "Refreshing..." : "Refresh dashboard"}
         </button>
@@ -574,6 +640,57 @@ function DashboardPanel({ userId }: { userId: string }) {
             </p>
             <p>Email: {data.profile?.email ?? "--"}</p>
             <p>Role: {data.profile?.role ?? "--"}</p>
+            <p>
+              Followers:{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveConnectionList((current) =>
+                    current === "followers" ? "none" : "followers"
+                  )
+                }
+              >
+                {data.followState?.result_follower_count ?? 0}
+              </button>
+            </p>
+            <p>
+              Following:{" "}
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveConnectionList((current) =>
+                    current === "following" ? "none" : "following"
+                  )
+                }
+              >
+                {data.followState?.result_following_count ?? 0}
+              </button>
+            </p>
+            <p>
+              <Link href={`/profiles/${userId}`}>Open my public profile</Link>
+            </p>
+            {activeConnectionList !== "none" ? (
+              <>
+                <p>
+                  <strong>
+                    {activeConnectionList === "followers" ? "Followers" : "Following"}
+                  </strong>
+                </p>
+                {activeConnectionRows.length === 0 ? (
+                  <p className="muted">No users in this list yet.</p>
+                ) : (
+                  <ul>
+                    {activeConnectionRows.map((row) => (
+                      <li key={`${activeConnectionList}-${row.result_user_id}`}>
+                        <Link href={`/profiles/${row.result_user_id}`}>
+                          {row.result_username}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            ) : null}
           </div>
         </>
       ) : null}

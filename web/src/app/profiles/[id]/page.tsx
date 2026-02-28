@@ -50,6 +50,20 @@ type PortfolioHistoryRawRow = {
   result_holdings_json: unknown;
 };
 
+type FollowStateRow = {
+  result_target_user_id: string;
+  result_is_following: boolean;
+  result_follows_you: boolean;
+  result_follower_count: number;
+  result_following_count: number;
+};
+
+type FollowListRow = {
+  result_user_id: string;
+  result_username: string;
+  result_followed_at: string;
+};
+
 function formatSignedFlag(value: number): string {
   if (value > 0) return `+${formatFlagAmount(value)}`;
   if (value < 0) return `-${formatFlagAmount(Math.abs(value))}`;
@@ -121,8 +135,15 @@ function PublicProfilePanel({
   const [snapshot, setSnapshot] = useState<PublicProfileSnapshotRow | null>(null);
   const [holdings, setHoldings] = useState<PublicProfileHoldingRow[]>([]);
   const [portfolioHistory, setPortfolioHistory] = useState<PortfolioHistoryPoint[]>([]);
+  const [followState, setFollowState] = useState<FollowStateRow | null>(null);
+  const [followers, setFollowers] = useState<FollowListRow[]>([]);
+  const [following, setFollowing] = useState<FollowListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
+  const [activeConnectionList, setActiveConnectionList] = useState<
+    "followers" | "following" | "none"
+  >("none");
   const [error, setError] = useState("");
 
   const loadProfile = useCallback(async () => {
@@ -145,11 +166,34 @@ function PublicProfilePanel({
       target_user_id: profileUserId,
       lookback_days: 30
     });
+    const followStateQuery = supabase.rpc("get_follow_state", {
+      target_user_id: profileUserId
+    });
+    const followersQuery = supabase.rpc("get_follow_list", {
+      target_user_id: profileUserId,
+      list_kind: "followers",
+      limit_count: 8
+    });
+    const followingQuery = supabase.rpc("get_follow_list", {
+      target_user_id: profileUserId,
+      list_kind: "following",
+      limit_count: 8
+    });
 
-    const [snapshotResult, holdingsResult, portfolioHistoryResult] = await Promise.all([
+    const [
+      snapshotResult,
+      holdingsResult,
+      portfolioHistoryResult,
+      followStateResult,
+      followersResult,
+      followingResult
+    ] = await Promise.all([
       snapshotQuery,
       holdingsQuery,
-      portfolioHistoryQuery
+      portfolioHistoryQuery,
+      followStateQuery,
+      followersQuery,
+      followingQuery
     ]);
 
     if (snapshotResult.error) {
@@ -157,6 +201,9 @@ function PublicProfilePanel({
       setSnapshot(null);
       setHoldings([]);
       setPortfolioHistory([]);
+      setFollowState(null);
+      setFollowers([]);
+      setFollowing([]);
       setLoading(false);
       setBusy(false);
       return;
@@ -166,6 +213,9 @@ function PublicProfilePanel({
       setSnapshot(null);
       setHoldings([]);
       setPortfolioHistory([]);
+      setFollowState(null);
+      setFollowers([]);
+      setFollowing([]);
       setLoading(false);
       setBusy(false);
       return;
@@ -175,6 +225,45 @@ function PublicProfilePanel({
       setSnapshot(null);
       setHoldings([]);
       setPortfolioHistory([]);
+      setFollowState(null);
+      setFollowers([]);
+      setFollowing([]);
+      setLoading(false);
+      setBusy(false);
+      return;
+    }
+    if (followStateResult.error) {
+      setError(followStateResult.error.message);
+      setSnapshot(null);
+      setHoldings([]);
+      setPortfolioHistory([]);
+      setFollowState(null);
+      setFollowers([]);
+      setFollowing([]);
+      setLoading(false);
+      setBusy(false);
+      return;
+    }
+    if (followersResult.error) {
+      setError(followersResult.error.message);
+      setSnapshot(null);
+      setHoldings([]);
+      setPortfolioHistory([]);
+      setFollowState(null);
+      setFollowers([]);
+      setFollowing([]);
+      setLoading(false);
+      setBusy(false);
+      return;
+    }
+    if (followingResult.error) {
+      setError(followingResult.error.message);
+      setSnapshot(null);
+      setHoldings([]);
+      setPortfolioHistory([]);
+      setFollowState(null);
+      setFollowers([]);
+      setFollowing([]);
       setLoading(false);
       setBusy(false);
       return;
@@ -193,17 +282,25 @@ function PublicProfilePanel({
         holdings: parseHistoryHoldings(row.result_holdings_json)
       }))
     );
+    const followStateRows = (followStateResult.data ?? []) as FollowStateRow[];
+    setFollowState(followStateRows[0] ?? null);
+    setFollowers((followersResult.data ?? []) as FollowListRow[]);
+    setFollowing((followingResult.data ?? []) as FollowListRow[]);
     setLoading(false);
     setBusy(false);
   }, [profileUserId, supabase]);
 
   useEffect(() => {
+    setActiveConnectionList("none");
     loadProfile().catch((loadError: unknown) => {
       const msg = loadError instanceof Error ? loadError.message : "Unknown load error";
       setError(msg);
       setSnapshot(null);
       setHoldings([]);
       setPortfolioHistory([]);
+      setFollowState(null);
+      setFollowers([]);
+      setFollowing([]);
       setLoading(false);
       setBusy(false);
     });
@@ -234,6 +331,33 @@ function PublicProfilePanel({
   }
 
   const isCurrentUser = snapshot.result_user_id === viewerUserId;
+  const isFollowing = followState?.result_is_following ?? false;
+  const activeConnectionRows =
+    activeConnectionList === "followers"
+      ? followers
+      : activeConnectionList === "following"
+        ? following
+        : [];
+
+  const toggleFollow = async () => {
+    if (isCurrentUser || !profileUserId) return;
+    setFollowBusy(true);
+    setError("");
+
+    const fnName = isFollowing ? "unfollow_user" : "follow_user";
+    const { error: followError } = await supabase.rpc(fnName, {
+      target_user_id: profileUserId
+    });
+
+    if (followError) {
+      setError(followError.message);
+      setFollowBusy(false);
+      return;
+    }
+
+    await loadProfile();
+    setFollowBusy(false);
+  };
 
   return (
     <div className="grid">
@@ -242,6 +366,44 @@ function PublicProfilePanel({
           {snapshot.result_username}
           {isCurrentUser ? " (You)" : ""}
         </h2>
+        {!isCurrentUser ? (
+          <>
+            <button type="button" onClick={toggleFollow} disabled={busy || followBusy}>
+              {followBusy
+                ? "Saving..."
+                : isFollowing
+                  ? "Unfollow"
+                  : "Follow"}
+            </button>
+            {followState?.result_follows_you ? <p>Follows you</p> : null}
+          </>
+        ) : null}
+        <p>
+          Followers:{" "}
+          <button
+            type="button"
+            onClick={() =>
+              setActiveConnectionList((current) =>
+                current === "followers" ? "none" : "followers"
+              )
+            }
+          >
+            {followState?.result_follower_count ?? 0}
+          </button>
+        </p>
+        <p>
+          Following:{" "}
+          <button
+            type="button"
+            onClick={() =>
+              setActiveConnectionList((current) =>
+                current === "following" ? "none" : "following"
+              )
+            }
+          >
+            {followState?.result_following_count ?? 0}
+          </button>
+        </p>
         <button type="button" onClick={loadProfile} disabled={busy}>
           {busy ? "Refreshing..." : "Refresh profile"}
         </button>
@@ -333,6 +495,34 @@ function PublicProfilePanel({
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Connections</h2>
+        {activeConnectionList === "none" ? (
+          <p className="muted">
+            Click follower/following count above to view the list.
+          </p>
+        ) : (
+          <>
+            <p>
+              <strong>
+                {activeConnectionList === "followers" ? "Followers" : "Following"}
+              </strong>
+            </p>
+            {activeConnectionRows.length === 0 ? (
+              <p className="muted">No users in this list yet.</p>
+            ) : (
+              <ul>
+                {activeConnectionRows.map((row) => (
+                  <li key={`${activeConnectionList}-${row.result_user_id}`}>
+                    <Link href={`/profiles/${row.result_user_id}`}>{row.result_username}</Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </div>
 

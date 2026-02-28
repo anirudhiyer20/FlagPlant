@@ -1,6 +1,14 @@
 -- Patch for existing projects:
 -- adds portfolio value history RPC with close-day FlagPlant breakdown.
 
+create or replace function public.app_current_date_est()
+returns date
+language sql
+stable
+as $$
+  select (now() at time zone 'America/New_York')::date
+$$;
+
 create or replace function public.get_user_portfolio_history(
   target_user_id uuid,
   lookback_days int default 30
@@ -18,18 +26,20 @@ set search_path = public
 as $$
 declare
   clamped_days int;
+  v_today date;
 begin
   if auth.uid() is null then
     raise exception 'Authentication required';
   end if;
 
   clamped_days := greatest(1, least(coalesce(lookback_days, 30), 120));
+  v_today := public.app_current_date_est();
 
   return query
   with date_window as (
     select generate_series(
-      (current_date - (clamped_days - 1))::timestamp,
-      current_date::timestamp,
+      (v_today - (clamped_days - 1))::timestamp,
+      v_today::timestamp,
       interval '1 day'
     )::date as snap_date
   ),
@@ -78,7 +88,7 @@ begin
         pbd.units_close
         * (
           case
-            when pbd.snap_date = current_date then p.current_price
+            when pbd.snap_date = v_today then p.current_price
             else coalesce(
               (
                 select dps.post_price
@@ -123,7 +133,7 @@ begin
           select sum(wl.delta_flags)
           from public.wallet_ledger wl
           where wl.user_id = target_user_id
-            and wl.created_at::date <= dw.snap_date
+            and (wl.created_at at time zone 'America/New_York')::date <= dw.snap_date
         ),
         0::numeric
       )::numeric(18,6) as unplanted_flags_close
