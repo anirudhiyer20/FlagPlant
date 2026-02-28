@@ -7,7 +7,7 @@ import PlayerPriceHistoryChart, {
 } from "@/components/player-price-history-chart";
 import RequireAuth from "@/components/require-auth";
 import TopNav from "@/components/top-nav";
-import { getEasternDateString } from "@/lib/dates";
+import { formatEasternDateTime, getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -52,6 +52,7 @@ type OrderRow = {
   units_amount: number | null;
   trade_date: string;
   created_at: string;
+  executed_at: string | null;
 };
 
 type PlayerPriceHistoryRawRow = {
@@ -161,9 +162,10 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       .eq("status", "pending");
     const ordersQuery = supabase
       .from("orders")
-      .select("id,order_type,status,flags_amount,units_amount,trade_date,created_at")
+      .select("id,order_type,status,flags_amount,units_amount,trade_date,created_at,executed_at")
       .eq("user_id", userId)
       .eq("player_id", playerId)
+      .order("executed_at", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(20);
     const priceHistoryQuery = supabase.rpc("get_player_price_history", {
@@ -556,7 +558,8 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
           <table>
             <thead>
               <tr>
-                <th>Date</th>
+                <th>Created</th>
+                <th>Processed</th>
                 <th>Type</th>
                 <th>Status</th>
                 <th>Flags</th>
@@ -567,7 +570,10 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
             <tbody>
               {orders.map((order) => (
                 <tr key={order.id}>
-                  <td>{order.trade_date}</td>
+                  <td>{formatEasternDateTime(order.created_at)}</td>
+                  <td>
+                    {order.executed_at ? formatEasternDateTime(order.executed_at) : "--"}
+                  </td>
                   <td>{order.order_type}</td>
                   <td>{order.status}</td>
                   <td>

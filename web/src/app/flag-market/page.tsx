@@ -34,6 +34,7 @@ type OrderRow = {
   units_amount: number | null;
   trade_date: string;
   created_at: string;
+  executed_at: string | null;
 };
 
 type PlayerLookupRow = {
@@ -46,7 +47,7 @@ type OrderViewRow = OrderRow & {
 };
 
 type TabKey = "available_players" | "my_orders";
-type RecentOrderFilter = "executed" | "failed" | "all";
+type RecentOrderFilter = "executed" | "failed" | "cancelled" | "all";
 
 export default function FlagMarketPage() {
   return (
@@ -239,7 +240,7 @@ function OrdersPanel({ userId }: { userId: string }) {
     const { data: orderData, error: orderError } = await supabase
       .from("orders")
       .select(
-        "id,player_id,order_type,status,flags_amount,units_amount,trade_date,created_at"
+        "id,player_id,order_type,status,flags_amount,units_amount,trade_date,created_at,executed_at"
       )
       .eq("user_id", userId)
       .eq("status", "pending")
@@ -277,15 +278,16 @@ function OrdersPanel({ userId }: { userId: string }) {
       let query = supabase
         .from("orders")
         .select(
-          "id,player_id,order_type,status,flags_amount,units_amount,trade_date,created_at",
+          "id,player_id,order_type,status,flags_amount,units_amount,trade_date,created_at,executed_at",
           { count: "exact" }
         )
         .eq("user_id", userId)
+        .order("executed_at", { ascending: false })
         .order("created_at", { ascending: false })
         .range(from, to);
 
       if (filter === "all") {
-        query = query.in("status", ["executed", "failed"]);
+        query = query.in("status", ["executed", "failed", "cancelled"]);
       } else {
         query = query.eq("status", filter);
       }
@@ -476,6 +478,14 @@ function OrdersPanel({ userId }: { userId: string }) {
           </button>
           <button
             type="button"
+            onClick={() => onRecentFilterChange("cancelled")}
+            className={recentFilter === "cancelled" ? "" : "secondary"}
+            disabled={recentBusy}
+          >
+            Cancelled
+          </button>
+          <button
+            type="button"
             onClick={() => onRecentFilterChange("all")}
             className={recentFilter === "all" ? "" : "secondary"}
             disabled={recentBusy}
@@ -493,7 +503,7 @@ function OrdersPanel({ userId }: { userId: string }) {
             <table>
               <thead>
                 <tr>
-                  <th>Created</th>
+                  <th>Processed</th>
                   <th>Trade Date</th>
                   <th>Player</th>
                   <th>Type</th>
@@ -505,7 +515,11 @@ function OrdersPanel({ userId }: { userId: string }) {
               <tbody>
                 {recentOrders.map((order) => (
                   <tr key={order.id}>
-                    <td>{formatEasternDateTime(order.created_at)}</td>
+                    <td>
+                      {order.executed_at
+                        ? formatEasternDateTime(order.executed_at)
+                        : formatEasternDateTime(order.created_at)}
+                    </td>
                     <td>{order.trade_date}</td>
                     <td>
                       <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
