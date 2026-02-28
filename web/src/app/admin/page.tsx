@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import TopNav from "@/components/top-nav";
-import { getEasternDateString } from "@/lib/dates";
+import { formatEasternDateTime, getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -97,6 +97,23 @@ type RepricingRow = {
   result_price_multiplier: number;
 };
 
+type AdminPlayerRow = {
+  id: string;
+  name: string;
+  seed_price: number;
+  current_price: number;
+  updated_at: string;
+};
+
+type PriceOverrideResultRow = {
+  result_player_id: string;
+  result_player_name: string;
+  result_previous_price: number;
+  result_current_price: number;
+  result_override_reason: string | null;
+  result_updated_at: string;
+};
+
 type DailyCloseStepRow = {
   result_step: string;
   result_status: string;
@@ -149,8 +166,17 @@ function AdminPanel({ userId }: { userId: string }) {
   const [executingSellOrders, setExecutingSellOrders] = useState(false);
   const [repricingBusy, setRepricingBusy] = useState(false);
   const [dailyCloseBusy, setDailyCloseBusy] = useState(false);
+  const [overrideLoading, setOverrideLoading] = useState(false);
+  const [overrideBusy, setOverrideBusy] = useState(false);
   const [previewRows, setPreviewRows] = useState<WinnerRow[]>([]);
   const [publishedRows, setPublishedRows] = useState<PublishedRow[]>([]);
+  const [overridePlayers, setOverridePlayers] = useState<AdminPlayerRow[]>([]);
+  const [selectedOverridePlayerId, setSelectedOverridePlayerId] = useState("");
+  const [overridePrice, setOverridePrice] = useState("");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [overrideResult, setOverrideResult] = useState<PriceOverrideResultRow | null>(
+    null
+  );
   const [pendingOrderSummaryRows, setPendingOrderSummaryRows] = useState<
     PendingOrderSummaryRow[]
   >([]);
@@ -163,6 +189,44 @@ function AdminPanel({ userId }: { userId: string }) {
   const [dailyCloseRows, setDailyCloseRows] = useState<DailyCloseStepRow[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const selectedOverridePlayer = overridePlayers.find(
+    (row) => row.id === selectedOverridePlayerId
+  );
+
+  const loadManualOverridePlayers = useCallback(async () => {
+    setOverrideLoading(true);
+
+    const { data, error: playersError } = await supabase
+      .from("players")
+      .select("id,name,seed_price,current_price,updated_at")
+      .order("name", { ascending: true });
+
+    if (playersError) {
+      setError(playersError.message);
+      setOverridePlayers([]);
+      setOverrideLoading(false);
+      return;
+    }
+
+    const rows = (data ?? []) as AdminPlayerRow[];
+    setOverridePlayers(rows);
+    let autoSelectedPlayer: AdminPlayerRow | null = null;
+
+    setSelectedOverridePlayerId((current) => {
+      const hasCurrent = current.length > 0 && rows.some((row) => row.id === current);
+      const nextPlayerId = hasCurrent ? current : (rows[0]?.id ?? "");
+      if (!hasCurrent && nextPlayerId) {
+        autoSelectedPlayer = rows.find((row) => row.id === nextPlayerId) ?? null;
+      }
+      return nextPlayerId;
+    });
+
+    if (autoSelectedPlayer) {
+      setOverridePrice(String(autoSelectedPlayer.current_price));
+    }
+
+    setOverrideLoading(false);
+  }, [supabase]);
 
   useEffect(() => {
     async function loadRole() {
@@ -182,6 +246,9 @@ function AdminPanel({ userId }: { userId: string }) {
 
       const role = (data as RoleRow).role;
       setIsAdmin(role === "admin");
+      if (role === "admin") {
+        await loadManualOverridePlayers();
+      }
       setLoadingRole(false);
     }
 
@@ -190,7 +257,7 @@ function AdminPanel({ userId }: { userId: string }) {
       setError(msg);
       setLoadingRole(false);
     });
-  }, [supabase, userId]);
+  }, [loadManualOverridePlayers, supabase, userId]);
 
   async function loadPublishedForDate() {
     const { data, error: publishedError } = await supabase
@@ -442,6 +509,56 @@ function AdminPanel({ userId }: { userId: string }) {
     setRepricingBusy(false);
   }
 
+  async function applyManualPriceOverride() {
+    setOverrideBusy(true);
+    setMessage("");
+    setError("");
+
+    if (!selectedOverridePlayerId) {
+      setError("Select a player to override.");
+      setOverrideBusy(false);
+      return;
+    }
+
+    const parsedPrice = Number.parseFloat(overridePrice);
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      setError("Enter a valid override price greater than 0.");
+      setOverrideBusy(false);
+      return;
+    }
+
+    const normalizedReason = overrideReason.trim();
+    const { data, error: overrideError } = await supabase.rpc(
+      "admin_override_player_price",
+      {
+        target_player_id: selectedOverridePlayerId,
+        override_price: parsedPrice,
+        override_reason: normalizedReason.length > 0 ? normalizedReason : null
+      }
+    );
+
+    if (overrideError) {
+      setError(overrideError.message);
+      setOverrideBusy(false);
+      return;
+    }
+
+    const row = ((data ?? []) as PriceOverrideResultRow[])[0] ?? null;
+    if (!row) {
+      setError("Override completed but no result row returned.");
+      setOverrideBusy(false);
+      return;
+    }
+
+    setOverrideResult(row);
+    setMessage(
+      `Manual override applied: ${row.result_player_name} ${formatFlagAmount(row.result_previous_price)} -> ${formatFlagAmount(row.result_current_price)}.`
+    );
+    setOverrideReason("");
+    await loadManualOverridePlayers();
+    setOverrideBusy(false);
+  }
+
   async function publishWinners() {
     setPublishing(true);
     setMessage("");
@@ -483,7 +600,8 @@ function AdminPanel({ userId }: { userId: string }) {
   }
 
   return (
-    <div className="card">
+    <div className="grid">
+      <div className="card">
       <h2>Daily Close Pipeline</h2>
       <div className="grid">
         <button
@@ -527,6 +645,9 @@ function AdminPanel({ userId }: { userId: string }) {
         </table>
       )}
 
+      </div>
+
+      <div className="card">
       <h2>Winner Tools</h2>
       <div className="grid">
         <label>
@@ -564,6 +685,9 @@ function AdminPanel({ userId }: { userId: string }) {
       {message ? <p className="success">{message}</p> : null}
       {error ? <p className="error">{error}</p> : null}
 
+      </div>
+
+      <div className="card">
       <h2>Preview</h2>
       {previewRows.length === 0 ? (
         <p className="muted">No preview rows loaded yet.</p>
@@ -590,6 +714,9 @@ function AdminPanel({ userId }: { userId: string }) {
         </table>
       )}
 
+      </div>
+
+      <div className="card">
       <h2>Published For Date</h2>
       {publishedRows.length === 0 ? (
         <p className="muted">No published winners found for selected date.</p>
@@ -616,7 +743,10 @@ function AdminPanel({ userId }: { userId: string }) {
         </table>
       )}
 
-      <h2>Order Clearing (Buy/Sell Orders)</h2>
+      </div>
+
+      <div className="card">
+      <h2>Order Clearing: Buy Orders</h2>
       <div className="grid">
         <button
           type="button"
@@ -708,6 +838,10 @@ function AdminPanel({ userId }: { userId: string }) {
         </>
       ) : null}
 
+      </div>
+
+      <div className="card">
+      <h2>Order Clearing: Sell Orders</h2>
       <div className="grid">
         <button
           type="button"
@@ -801,6 +935,140 @@ function AdminPanel({ userId }: { userId: string }) {
         </>
       ) : null}
 
+      </div>
+
+      <div className="card">
+      <h2>Manual Price Override</h2>
+      <p className="muted">
+        Admin-only emergency control. This updates a player&apos;s current price
+        immediately.
+      </p>
+      <div className="grid">
+        <button
+          type="button"
+          onClick={loadManualOverridePlayers}
+          disabled={
+            loading ||
+            publishing ||
+            executingOrders ||
+            executingSellOrders ||
+            repricingBusy ||
+            dailyCloseBusy ||
+            overrideBusy ||
+            overrideLoading
+          }
+        >
+          {overrideLoading ? "Loading players..." : "Refresh Players For Override"}
+        </button>
+        {overridePlayers.length === 0 ? (
+          <p className="muted">No players loaded yet.</p>
+        ) : (
+          <>
+            <label>
+              Player
+              <select
+                value={selectedOverridePlayerId}
+                onChange={(e) => {
+                  const nextId = e.target.value;
+                  setSelectedOverridePlayerId(nextId);
+                  const nextPlayer =
+                    overridePlayers.find((row) => row.id === nextId) ?? null;
+                  if (nextPlayer) {
+                    setOverridePrice(String(nextPlayer.current_price));
+                  }
+                }}
+                disabled={overrideBusy || overrideLoading}
+              >
+                {overridePlayers.map((player) => (
+                  <option key={player.id} value={player.id}>
+                    {player.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="muted">
+              Current price:{" "}
+              {selectedOverridePlayer
+                ? formatFlagAmount(selectedOverridePlayer.current_price)
+                : "--"}{" "}
+              | Seed price:{" "}
+              {selectedOverridePlayer
+                ? formatFlagAmount(selectedOverridePlayer.seed_price)
+                : "--"}
+            </p>
+            <p className="muted">
+              Last updated:{" "}
+              {selectedOverridePlayer?.updated_at
+                ? formatEasternDateTime(selectedOverridePlayer.updated_at)
+                : "--"}
+            </p>
+            <label>
+              Override Price
+              <input
+                type="number"
+                min="0.000001"
+                step="0.000001"
+                value={overridePrice}
+                onChange={(e) => setOverridePrice(e.target.value)}
+                disabled={overrideBusy || overrideLoading}
+              />
+            </label>
+            <label>
+              Reason (optional)
+              <input
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                maxLength={200}
+                disabled={overrideBusy || overrideLoading}
+              />
+            </label>
+            <button
+              type="button"
+              className="secondary"
+              onClick={applyManualPriceOverride}
+              disabled={
+                loading ||
+                publishing ||
+                executingOrders ||
+                executingSellOrders ||
+                repricingBusy ||
+                dailyCloseBusy ||
+                overrideBusy ||
+                overrideLoading
+              }
+            >
+              {overrideBusy ? "Applying Override..." : "Apply Manual Price Override"}
+            </button>
+          </>
+        )}
+      </div>
+
+      {overrideResult ? (
+        <table>
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Previous Price</th>
+              <th>Current Price</th>
+              <th>Reason</th>
+              <th>Updated At</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{overrideResult.result_player_name}</td>
+              <td>{formatFlagAmount(overrideResult.result_previous_price)}</td>
+              <td>{formatFlagAmount(overrideResult.result_current_price)}</td>
+              <td>{overrideResult.result_override_reason ?? "--"}</td>
+              <td>{formatEasternDateTime(overrideResult.result_updated_at)}</td>
+            </tr>
+          </tbody>
+        </table>
+      ) : null}
+
+      </div>
+
+      <div className="card">
       <h2>Repricing</h2>
       <div className="grid">
         <button
@@ -812,7 +1080,8 @@ function AdminPanel({ userId }: { userId: string }) {
             executingOrders ||
             executingSellOrders ||
             repricingBusy ||
-            dailyCloseBusy
+            dailyCloseBusy ||
+            overrideBusy
           }
         >
           {repricingBusy ? "Working..." : "Preview Repricing"}
@@ -827,7 +1096,8 @@ function AdminPanel({ userId }: { userId: string }) {
             executingOrders ||
             executingSellOrders ||
             repricingBusy ||
-            dailyCloseBusy
+            dailyCloseBusy ||
+            overrideBusy
           }
         >
           {repricingBusy ? "Working..." : "Apply Repricing"}
@@ -860,6 +1130,7 @@ function AdminPanel({ userId }: { userId: string }) {
           </tbody>
         </table>
       )}
+      </div>
     </div>
   );
 }

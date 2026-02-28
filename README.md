@@ -137,6 +137,7 @@ Also run `supabase/patch_portfolio_history.sql` once to add portfolio history RP
 Also run `supabase/patch_portfolio_persistence.sql` once to add persistent end-of-day portfolio snapshots and snapshot-backed history reads.
 Also run `supabase/patch_follows.sql` once to add follow/unfollow social graph RPCs.
 Also run `supabase/patch_daily_close.sql` once to add one-click admin daily-close pipeline RPC.
+Also run `supabase/patch_manual_price_override.sql` once to add admin manual player price override RPC.
 
 ### Existing Project Patch Order (Recommended)
 
@@ -159,6 +160,7 @@ Run in Supabase SQL Editor in this order:
 15. `supabase/patch_portfolio_persistence.sql`
 16. `supabase/patch_follows.sql`
 17. `supabase/patch_daily_close.sql`
+18. `supabase/patch_manual_price_override.sql`
 
 ### SQL Smoke Tests
 
@@ -241,6 +243,7 @@ Open http://localhost:3000
 23. On `/leaderboard`, toggle **Friends only** and confirm it shows only mutual follows (plus you).
 24. On `/admin`, run **Run Daily Close (All Steps)** and confirm step results are returned.
 25. In Supabase Table Editor, confirm `daily_user_portfolio_snapshots` and `daily_user_holding_snapshots` are populated for the close date.
+26. On `/admin`, in **Manual Price Override**, set a small test price change for one player and confirm `/flag-market` and `/players/[id]` reflect the new current price after refresh.
 
 ---
 
