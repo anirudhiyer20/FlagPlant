@@ -126,6 +126,10 @@ main > p > a:hover {
   margin-left: 0;
 }
 
+.top-nav a.profile-link.push-right {
+  margin-left: auto;
+}
+
 .top-nav .nav-networth {
   margin-left: auto;
   border: 1px solid var(--line);
@@ -374,6 +378,10 @@ code {
   }
 
   .top-nav a.profile-link {
+    margin-left: 0;
+  }
+
+  .top-nav a.profile-link.push-right {
     margin-left: 0;
   }
 

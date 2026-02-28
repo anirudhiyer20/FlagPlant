@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useAuthSession } from "@/components/session-provider";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Mode = "signup" | "login";
@@ -9,8 +10,8 @@ type Mode = "signup" | "login";
 export default function AuthPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const router = useRouter();
+  const { session, loading: sessionLoading } = useAuthSession();
   const [mode, setMode] = useState<Mode>("login");
-  const [sessionChecked, setSessionChecked] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
@@ -19,32 +20,10 @@ export default function AuthPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    let active = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      if (data.session) {
-        router.replace("/dashboard");
-        return;
-      }
-      setSessionChecked(true);
-    });
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        router.replace("/dashboard");
-        return;
-      }
-      setSessionChecked(true);
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [router, supabase.auth]);
+    if (!sessionLoading && session) {
+      router.replace("/dashboard");
+    }
+  }, [router, session, sessionLoading]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -88,7 +67,7 @@ export default function AuthPage() {
     }
   }
 
-  if (!sessionChecked) {
+  if (sessionLoading) {
     return (
       <main>
         <h1>Auth</h1>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useAuthSession } from "@/components/session-provider";
 import { formatFlagAmount } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -52,32 +53,11 @@ export default function TopNav() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const pathname = usePathname();
   const router = useRouter();
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const { session, signOut } = useAuthSession();
+  const isLoggedIn = Boolean(session);
+  const currentUserId = session?.user.id ?? null;
   const [netWorth, setNetWorth] = useState<number | null>(null);
   const [signingOut, setSigningOut] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      const session = data.session;
-      setIsLoggedIn(Boolean(session));
-      setCurrentUserId(session?.user.id ?? null);
-    });
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsLoggedIn(Boolean(session));
-      setCurrentUserId(session?.user.id ?? null);
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [supabase]);
 
   useEffect(() => {
     let active = true;
@@ -133,7 +113,7 @@ export default function TopNav() {
 
   async function onSignOut() {
     setSigningOut(true);
-    await supabase.auth.signOut();
+    await signOut();
     setSigningOut(false);
     router.push("/auth");
     router.refresh();
@@ -150,7 +130,7 @@ export default function TopNav() {
           <Link
             key={item.href}
             href={item.href}
-            className={`${isActive ? "active" : ""} ${item.href === "/dashboard" ? "profile-link" : ""}`.trim()}
+            className={isActive ? "active" : ""}
           >
             {item.label}
           </Link>
@@ -167,7 +147,7 @@ export default function TopNav() {
           pathname === profileItem.href || pathname.startsWith(profileItem.href)
             ? "active"
             : ""
-        } profile-link`.trim()}
+        } profile-link ${!isLoggedIn ? "push-right" : ""}`.trim()}
       >
         {profileItem.label}
       </Link>
@@ -180,7 +160,15 @@ export default function TopNav() {
         >
           {signingOut ? "Signing out..." : "Sign out"}
         </button>
-      ) : null}
+      ) : (
+        <button
+          type="button"
+          className="nav-signout"
+          onClick={() => router.push("/auth")}
+        >
+          Sign in
+        </button>
+      )}
     </nav>
   );
 }

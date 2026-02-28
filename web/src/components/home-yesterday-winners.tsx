@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAuthSession } from "@/components/session-provider";
 import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -19,8 +20,8 @@ type WinnerHistoryRow = {
 
 export default function HomeYesterdayWinners() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
-  const [sessionUserId, setSessionUserId] = useState<string | null>(null);
-  const [sessionChecked, setSessionChecked] = useState(false);
+  const { user, loading: sessionLoading } = useAuthSession();
+  const sessionUserId = user?.id ?? null;
   const [rows, setRows] = useState<WinnerHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -30,28 +31,6 @@ export default function HomeYesterdayWinners() {
     value.setDate(value.getDate() - 1);
     return getEasternDateString(value);
   }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setSessionUserId(data.session?.user.id ?? null);
-      setSessionChecked(true);
-    });
-
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSessionUserId(session?.user.id ?? null);
-      setSessionChecked(true);
-    });
-
-    return () => {
-      active = false;
-      subscription.unsubscribe();
-    };
-  }, [supabase.auth]);
 
   const loadWinners = useCallback(async () => {
     if (!sessionUserId) return;
@@ -89,15 +68,22 @@ export default function HomeYesterdayWinners() {
   }, [sessionUserId, supabase, yesterdayEt]);
 
   useEffect(() => {
+    if (!sessionUserId) {
+      setRows([]);
+      setLoading(false);
+      setError("");
+      return;
+    }
+
     loadWinners().catch((loadError: unknown) => {
       const msg = loadError instanceof Error ? loadError.message : "Unknown load error";
       setError(msg);
       setRows([]);
       setLoading(false);
     });
-  }, [loadWinners]);
+  }, [loadWinners, sessionUserId]);
 
-  if (!sessionChecked) {
+  if (sessionLoading) {
     return (
       <div className="card">
         <h2>Yesterday&apos;s Winners</h2>
