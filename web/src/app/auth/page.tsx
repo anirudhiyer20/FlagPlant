@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuthSession } from "@/components/session-provider";
+import { CardSkeleton } from "@/components/ui-skeletons";
+import { LoadingState } from "@/components/ui-states";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Mode = "signup" | "login";
@@ -71,7 +73,8 @@ export default function AuthPage() {
     return (
       <main>
         <h1>Auth</h1>
-        <p>Loading...</p>
+        <LoadingState message="Loading..." />
+        <CardSkeleton />
       </main>
     );
   }

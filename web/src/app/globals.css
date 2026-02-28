@@ -354,6 +354,60 @@ code {
   margin-top: 0.5rem;
 }
 
+.skeleton-block {
+  display: inline-block;
+  border-radius: 999px;
+  background: #e8dcc9;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-block::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.7),
+    transparent
+  );
+  animation: skeleton-shimmer 1.25s ease-in-out infinite;
+}
+
+.skeleton-lines {
+  margin-top: 0.8rem;
+  display: grid;
+  gap: 0.52rem;
+}
+
+.skeleton-card {
+  display: grid;
+}
+
+.skeleton-table {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.56rem;
+}
+
+.skeleton-table-grid {
+  display: grid;
+  gap: 0.56rem;
+  align-items: center;
+}
+
+.skeleton-table-head .skeleton-block {
+  height: 0.72rem !important;
+}
+
+@keyframes skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 @media (max-width: 720px) {
   main {
     padding: 1.25rem 0.8rem 3.4rem;

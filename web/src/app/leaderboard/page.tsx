@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import RequireAuth from "@/components/require-auth";
 import TopNav from "@/components/top-nav";
+import { CardSkeleton, TableSkeleton } from "@/components/ui-skeletons";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui-states";
 import { formatFlagAmount } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -136,11 +138,16 @@ function LeaderboardPanel({ userId }: { userId: string }) {
       </div>
       <p className="muted">Friends are mutual follows.</p>
 
-      {loading ? <p>Loading leaderboard...</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {loading ? (
+        <>
+          <LoadingState message="Loading leaderboard..." />
+          <TableSkeleton columns={6} rows={6} />
+        </>
+      ) : null}
+      {error ? <ErrorState message={error} /> : null}
 
       {!loading && !error && rows.length === 0 ? (
-        <p className="muted">No leaderboard rows yet.</p>
+        <EmptyState message="No leaderboard rows yet." />
       ) : null}
 
       {!loading && !error && rows.length > 0 ? (
@@ -256,11 +263,19 @@ function WinnerHistoryPanel() {
         {busy ? "Refreshing..." : "Refresh Previous Winners"}
       </button>
 
-      {loading ? <p>Loading winner history...</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {loading ? (
+        <>
+          <LoadingState message="Loading winner history..." />
+          <CardSkeleton />
+          <div className="card">
+            <TableSkeleton columns={5} rows={5} />
+          </div>
+        </>
+      ) : null}
+      {error ? <ErrorState message={error} /> : null}
 
       {!loading && !error && orderedDates.length === 0 ? (
-        <p className="muted">No published winner history yet.</p>
+        <EmptyState message="No published winner history yet." />
       ) : null}
 
       {!loading && !error

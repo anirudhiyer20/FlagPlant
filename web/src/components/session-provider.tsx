@@ -27,6 +27,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    const timeoutId = window.setTimeout(() => {
+      if (!active) return;
+      setLoading(false);
+    }, 6000);
 
     supabase.auth
       .getSession()
@@ -50,6 +54,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, [supabase]);

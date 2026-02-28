@@ -7,7 +7,9 @@ import RequireAuth from "@/components/require-auth";
 import PortfolioHistoryChart, {
   type PortfolioHistoryPoint
 } from "@/components/portfolio-history-chart";
+import { CardSkeleton, TableSkeleton } from "@/components/ui-skeletons";
 import TopNav from "@/components/top-nav";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui-states";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
@@ -464,16 +466,24 @@ function DashboardPanel({ userId }: { userId: string }) {
   return (
     <div className="grid">
       {loading ? (
-        <div className="card">
-          <p>Loading dashboard...</p>
+        <div className="grid">
+          <LoadingState message="Loading dashboard..." variant="card" />
+          <div className="dashboard-columns">
+            <div className="dashboard-column dashboard-column-left">
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+            <div className="dashboard-column dashboard-column-right">
+              <CardSkeleton />
+              <div className="card">
+                <TableSkeleton columns={6} rows={4} />
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
-      {error ? (
-        <div className="card">
-          <p className="error">{error}</p>
-        </div>
-      ) : null}
+      {error ? <ErrorState message={error} variant="card" /> : null}
 
       {!loading && !error ? (
         <>
@@ -531,7 +541,7 @@ function DashboardPanel({ userId }: { userId: string }) {
                   </strong>
                 </p>
                 {activeConnectionRows.length === 0 ? (
-                  <p className="muted">No users in this list yet.</p>
+                  <EmptyState message="No users in this list yet." />
                 ) : (
                   <ul>
                     {activeConnectionRows.map((row) => (
@@ -591,7 +601,7 @@ function DashboardPanel({ userId }: { userId: string }) {
                     <p>{data.latestWinner.opinion_body ?? "--"}</p>
                   </>
                 ) : (
-                  <p className="muted">No winner result yet for this account.</p>
+                  <EmptyState message="No winner result yet for this account." />
                 )}
               </div>
             </div>
@@ -619,7 +629,7 @@ function DashboardPanel({ userId }: { userId: string }) {
               <div className="card">
                 <h2>FlagPlants</h2>
                 {data.holdings.length === 0 ? (
-                  <p className="muted">No FlagPlants yet.</p>
+                  <EmptyState message="No FlagPlants yet." />
                 ) : (
                   <table className="dashboard-holdings-table">
                     <thead>

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import TopNav from "@/components/top-nav";
+import { CardSkeleton, TableSkeleton } from "@/components/ui-skeletons";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui-states";
 import { formatEasternDateTime } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -148,7 +150,8 @@ function PlayersTable() {
       <button type="button" onClick={loadPlayers} disabled={loading}>
         {loading ? "Loading..." : "Refresh Players"}
       </button>
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <ErrorState message={error} /> : null}
+      {loading ? <TableSkeleton columns={5} rows={8} /> : null}
 
       {!loading && !error ? (
         <>
@@ -360,14 +363,22 @@ function OrdersPanel({ userId }: { userId: string }) {
         </button>
       </div>
 
-      {loading ? <p>Loading Orders...</p> : null}
+      {loading ? (
+        <>
+          <LoadingState message="Loading orders..." />
+          <CardSkeleton />
+          <div className="card">
+            <TableSkeleton columns={8} rows={6} />
+          </div>
+        </>
+      ) : null}
       {message ? <p className="success">{message}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {error ? <ErrorState message={error} /> : null}
 
       <div className="card">
         <h2>Pending Orders</h2>
         {!loading && !error && pendingOrders.length === 0 ? (
-          <p className="muted">No Pending Orders.</p>
+          <EmptyState message="No pending orders." />
         ) : null}
 
         {!loading && !error && pendingOrders.length > 0 ? (
@@ -430,7 +441,7 @@ function OrdersPanel({ userId }: { userId: string }) {
         </p>
 
         {!loading && !error && recentOrders.length === 0 ? (
-          <p className="muted">No Executed Orders Yet.</p>
+          <EmptyState message="No executed orders yet." />
         ) : null}
 
         {!loading && !error && recentOrders.length > 0 ? (

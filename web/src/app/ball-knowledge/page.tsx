@@ -3,6 +3,8 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import TopNav from "@/components/top-nav";
+import { CardSkeleton } from "@/components/ui-skeletons";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui-states";
 import { getEasternDateString } from "@/lib/dates";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -252,9 +254,14 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
       {activeTab === "opinion" ? (
         <div className="card">
         <h2>Daily Opinion</h2>
-        {loadingOpinion ? <p>Loading your opinion status...</p> : null}
+        {loadingOpinion ? (
+          <>
+            <LoadingState message="Loading your opinion status..." />
+            <CardSkeleton />
+          </>
+        ) : null}
         {opinionMessage ? <p className="success">{opinionMessage}</p> : null}
-        {opinionError ? <p className="error">{opinionError}</p> : null}
+        {opinionError ? <ErrorState message={opinionError} /> : null}
 
         {!loadingOpinion && existingOpinion ? (
           <>
@@ -293,12 +300,17 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
           Votes cast: {votedOpinionIds.length}/{items.length}
         </p>
 
-        {loadingVote ? <p>Loading vote assignments...</p> : null}
+        {loadingVote ? (
+          <>
+            <LoadingState message="Loading vote assignments..." />
+            <CardSkeleton />
+          </>
+        ) : null}
         {voteMessage ? <p className="success">{voteMessage}</p> : null}
-        {voteError ? <p className="error">{voteError}</p> : null}
+        {voteError ? <ErrorState message={voteError} /> : null}
 
         {!loadingVote && items.length === 0 ? (
-          <p className="muted">No assignments found for today&apos;s voting date.</p>
+          <EmptyState message="No assignments found for today&apos;s voting date." />
         ) : null}
 
         {!loadingVote && items.length > 0 ? (

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthSession } from "@/components/session-provider";
+import { CardSkeleton, TableSkeleton } from "@/components/ui-skeletons";
+import { EmptyState, ErrorState, LoadingState } from "@/components/ui-states";
 import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -85,21 +87,24 @@ export default function HomeYesterdayWinners() {
 
   if (sessionLoading) {
     return (
-      <div className="card">
-        <h2>Yesterday&apos;s Winners</h2>
-        <p>Checking login status...</p>
+      <div className="grid">
+        <LoadingState
+          title="Yesterday&apos;s Winners"
+          message="Checking login status..."
+          variant="card"
+        />
+        <CardSkeleton />
       </div>
     );
   }
 
   if (!sessionUserId) {
     return (
-      <div className="card">
-        <h2>Yesterday&apos;s Winners</h2>
-        <p className="muted">
-          Sign in to see the previous day&apos;s winner leaderboard on home.
-        </p>
-      </div>
+      <EmptyState
+        title="Yesterday&apos;s Winners"
+        message="Sign in to see the previous day&apos;s winner leaderboard on home."
+        variant="card"
+      />
     );
   }
 
@@ -107,11 +112,16 @@ export default function HomeYesterdayWinners() {
     <div className="card">
       <h2>Yesterday&apos;s Winners</h2>
       <p className="muted">Target date: {yesterdayEt}</p>
-      {loading ? <p>Loading winners...</p> : null}
-      {error ? <p className="error">{error}</p> : null}
+      {loading ? (
+        <>
+          <LoadingState message="Loading winners..." />
+          <TableSkeleton columns={5} rows={4} />
+        </>
+      ) : null}
+      {error ? <ErrorState message={error} /> : null}
 
       {!loading && !error && rows.length === 0 ? (
-        <p className="muted">No published winners yet.</p>
+        <EmptyState message="No published winners yet." />
       ) : null}
 
       {!loading && !error && rows.length > 0 ? (
