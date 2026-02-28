@@ -3,6 +3,7 @@
 -- 1) date-scoped health summary
 -- 2) recent system job log listing
 
+drop function if exists public.admin_get_daily_close_diagnostics(date);
 create or replace function public.admin_get_daily_close_diagnostics(
   target_date date default public.app_current_date_est()
 )
@@ -21,6 +22,7 @@ returns table (
   result_holding_snapshots_count int,
   result_pending_buy_orders_count int,
   result_pending_sell_orders_count int,
+  result_cancelled_orders_count int,
   result_failed_orders_count int
 )
 language plpgsql
@@ -89,6 +91,115 @@ begin
         and o.status = 'pending'
         and o.order_type = 'sell'
     ) as result_pending_sell_orders_count,
+    (
+      select count(*)::int
+      from public.orders o
+      where o.trade_date = target_date
+        and o.status = 'cancelled'
+    ) as result_cancelled_orders_count,
+    (
+      select count(*)::int
+      from public.orders o
+      where o.trade_date = target_date
+        and o.status = 'failed'
+    ) as result_failed_orders_count;
+end;
+$$;
+
+-- SQL-editor helper: same diagnostics shape, but without auth context requirements.
+-- This is intentionally not granted to app roles.
+drop function if exists public.sql_editor_get_daily_close_diagnostics(date);
+create or replace function public.sql_editor_get_daily_close_diagnostics(
+  target_date date default public.app_current_date_est()
+)
+returns table (
+  result_target_date date,
+  result_close_job_status text,
+  result_close_job_started_at timestamptz,
+  result_close_job_finished_at timestamptz,
+  result_close_job_error text,
+  result_publish_job_status text,
+  result_publish_job_started_at timestamptz,
+  result_publish_job_finished_at timestamptz,
+  result_publish_job_error text,
+  result_winners_count int,
+  result_portfolio_snapshots_count int,
+  result_holding_snapshots_count int,
+  result_pending_buy_orders_count int,
+  result_pending_sell_orders_count int,
+  result_cancelled_orders_count int,
+  result_failed_orders_count int
+)
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  close_job public.system_jobs%rowtype;
+  publish_job public.system_jobs%rowtype;
+begin
+  if target_date is null then
+    raise exception 'Target date is required';
+  end if;
+
+  select sj.*
+  into close_job
+  from public.system_jobs sj
+  where sj.job_date = target_date
+    and sj.job_type = 'close_compute';
+
+  select sj.*
+  into publish_job
+  from public.system_jobs sj
+  where sj.job_date = target_date
+    and sj.job_type = 'publish';
+
+  return query
+  select
+    target_date as result_target_date,
+    coalesce(close_job.status::text, 'not_run') as result_close_job_status,
+    close_job.started_at as result_close_job_started_at,
+    close_job.finished_at as result_close_job_finished_at,
+    close_job.log_json ->> 'error' as result_close_job_error,
+    coalesce(publish_job.status::text, 'not_run') as result_publish_job_status,
+    publish_job.started_at as result_publish_job_started_at,
+    publish_job.finished_at as result_publish_job_finished_at,
+    publish_job.log_json ->> 'error' as result_publish_job_error,
+    (
+      select count(*)::int
+      from public.daily_winners dw
+      where dw.winner_date = target_date
+    ) as result_winners_count,
+    (
+      select count(*)::int
+      from public.daily_user_portfolio_snapshots ps
+      where ps.snap_date = target_date
+    ) as result_portfolio_snapshots_count,
+    (
+      select count(*)::int
+      from public.daily_user_holding_snapshots hs
+      where hs.snap_date = target_date
+    ) as result_holding_snapshots_count,
+    (
+      select count(*)::int
+      from public.orders o
+      where o.trade_date = target_date
+        and o.status = 'pending'
+        and o.order_type = 'buy'
+    ) as result_pending_buy_orders_count,
+    (
+      select count(*)::int
+      from public.orders o
+      where o.trade_date = target_date
+        and o.status = 'pending'
+        and o.order_type = 'sell'
+    ) as result_pending_sell_orders_count,
+    (
+      select count(*)::int
+      from public.orders o
+      where o.trade_date = target_date
+        and o.status = 'cancelled'
+    ) as result_cancelled_orders_count,
     (
       select count(*)::int
       from public.orders o
@@ -190,6 +301,11 @@ $$;
 
 revoke all on function public.admin_get_daily_close_diagnostics(date) from public;
 grant execute on function public.admin_get_daily_close_diagnostics(date) to authenticated;
+
+revoke all on function public.sql_editor_get_daily_close_diagnostics(date) from public;
+revoke all on function public.sql_editor_get_daily_close_diagnostics(date) from anon;
+revoke all on function public.sql_editor_get_daily_close_diagnostics(date) from authenticated;
+grant execute on function public.sql_editor_get_daily_close_diagnostics(date) to postgres;
 
 revoke all on function public.admin_list_recent_system_jobs(int) from public;
 grant execute on function public.admin_list_recent_system_jobs(int) to authenticated;

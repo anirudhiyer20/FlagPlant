@@ -147,6 +147,7 @@ type DailyCloseDiagnosticRow = {
   result_holding_snapshots_count: number;
   result_pending_buy_orders_count: number;
   result_pending_sell_orders_count: number;
+  result_cancelled_orders_count: number;
   result_failed_orders_count: number;
 };
 
@@ -165,6 +166,7 @@ type DailyCloseDiagnosticRawRow = {
   result_holding_snapshots_count?: number;
   result_pending_buy_orders_count?: number;
   result_pending_sell_orders_count?: number;
+  result_cancelled_orders_count?: number;
   result_failed_orders_count?: number;
 };
 
@@ -343,6 +345,7 @@ function AdminPanel({ userId }: { userId: string }) {
           result_holding_snapshots_count: raw.result_holding_snapshots_count ?? 0,
           result_pending_buy_orders_count: raw.result_pending_buy_orders_count ?? 0,
           result_pending_sell_orders_count: raw.result_pending_sell_orders_count ?? 0,
+          result_cancelled_orders_count: raw.result_cancelled_orders_count ?? 0,
           result_failed_orders_count: raw.result_failed_orders_count ?? 0
         });
       }
@@ -957,6 +960,11 @@ function AdminPanel({ userId }: { userId: string }) {
                 <td>Pending Sell Orders</td>
                 <td>{diagnosticsSummary.result_pending_sell_orders_count}</td>
                 <td>Open sell orders still awaiting admin execution.</td>
+              </tr>
+              <tr>
+                <td>Cancelled Orders</td>
+                <td>{diagnosticsSummary.result_cancelled_orders_count}</td>
+                <td>Orders marked `cancelled` for selected trade date.</td>
               </tr>
               <tr>
                 <td>Failed Orders</td>
