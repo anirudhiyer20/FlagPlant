@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import PortfolioHistoryChart, {
   type PortfolioHistoryPoint
 } from "@/components/portfolio-history-chart";
+import TopNav from "@/components/top-nav";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -98,20 +99,24 @@ function parseHistoryHoldings(raw: unknown): PortfolioHistoryPoint["holdings"] {
 
 export default function PublicProfilePage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const profileUserId = useMemo(() => params?.id ?? "", [params]);
+
+  function onBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/leaderboard");
+  }
 
   return (
     <main>
+      <TopNav />
       <h1>Public Profile</h1>
-      <p>
-        <Link href="/leaderboard">Back to Leaderboard</Link>
-      </p>
-      <p>
-        <Link href="/dashboard">Go to Dashboard</Link>
-      </p>
-      <p>
-        <Link href="/players">Go to Players</Link>
-      </p>
+      <button type="button" onClick={onBack}>
+        Back
+      </button>
       <RequireAuth>
         {(session) => (
           <PublicProfilePanel

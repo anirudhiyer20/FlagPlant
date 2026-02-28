@@ -16,6 +16,10 @@ export default function RequireAuth({ children }: RequireAuthProps) {
 
   useEffect(() => {
     let mounted = true;
+    const timeoutId = window.setTimeout(() => {
+      if (!mounted) return;
+      setLoading(false);
+    }, 6000);
 
     supabase.auth
       .getSession()
@@ -38,6 +42,7 @@ export default function RequireAuth({ children }: RequireAuthProps) {
 
     return () => {
       mounted = false;
+      window.clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, [supabase]);

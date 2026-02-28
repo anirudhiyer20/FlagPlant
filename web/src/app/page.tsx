@@ -1,9 +1,11 @@
-import Link from "next/link";
+import HomeYesterdayWinners from "@/components/home-yesterday-winners";
+import TopNav from "@/components/top-nav";
 
 export default function HomePage() {
   return (
     <main>
-      <h1>FlagPlant Phase 2 Starter</h1>
+      <TopNav />
+      <h1>FlagPlant</h1>
       <p className="muted">
         Your Supabase database is live. This app now includes auth, protected
         pages, a daily opinion submit flow, voting, winner admin tools, and a
@@ -14,48 +16,17 @@ export default function HomePage() {
         <h2>Next Actions</h2>
         <ol>
           <li>Open auth and log in.</li>
-          <li>Open dashboard and confirm your wallet/opinion/vote status.</li>
-          <li>Open daily opinion and submit once for today.</li>
-          <li>Open vote and cast votes on assigned opinions.</li>
-          <li>Open admin and preview/publish winners.</li>
-          <li>Open players, open a player detail, and create a buy order.</li>
-          <li>Open My Orders and confirm order history appears.</li>
-          <li>Open admin and run order clearing + repricing.</li>
-          <li>Open leaderboard and compare net worth rankings.</li>
-          <li>Open winner history and review prior daily top-5 boards.</li>
+          <li>Open User Profile and confirm your account status.</li>
+          <li>Open Ball Knowledge for daily opinion + voting.</li>
+          <li>Open Flag Market and place buy/sell orders.</li>
+          <li>Use Admin Mode from User Profile if you are admin.</li>
+          <li>Run order clearing + repricing from Admin tools.</li>
+          <li>Open Leaderboard and compare net worth rankings.</li>
+          <li>Use Leaderboard tabs to switch to previous winners.</li>
         </ol>
       </div>
 
-      <div className="card">
-        <h2>Pages</h2>
-        <p>
-          <Link href="/auth">Go to Auth</Link>
-        </p>
-        <p>
-          <Link href="/dashboard">Go to Dashboard</Link>
-        </p>
-        <p>
-          <Link href="/opinion">Go to Daily Opinion</Link>
-        </p>
-        <p>
-          <Link href="/vote">Go to Vote</Link>
-        </p>
-        <p>
-          <Link href="/admin">Go to Admin</Link>
-        </p>
-        <p>
-          <Link href="/players">Go to Players</Link>
-        </p>
-        <p>
-          <Link href="/orders">Go to My Orders</Link>
-        </p>
-        <p>
-          <Link href="/leaderboard">Go to Leaderboard</Link>
-        </p>
-        <p>
-          <Link href="/winners">Go to Winner History</Link>
-        </p>
-      </div>
+      <HomeYesterdayWinners />
     </main>
   );
 }

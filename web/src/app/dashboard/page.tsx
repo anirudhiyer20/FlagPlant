@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import PortfolioHistoryChart, {
   type PortfolioHistoryPoint
 } from "@/components/portfolio-history-chart";
+import TopNav from "@/components/top-nav";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
@@ -128,37 +130,15 @@ function parseHistoryHoldings(raw: unknown): PortfolioHistoryPoint["holdings"] {
 export default function DashboardPage() {
   return (
     <main>
-      <h1>Dashboard</h1>
-      <p>
-        <Link href="/">Back to Home</Link>
-      </p>
-      <p>
-        <Link href="/opinion">Go to Daily Opinion</Link>
-      </p>
-      <p>
-        <Link href="/vote">Go to Vote</Link>
-      </p>
-      <p>
-        <Link href="/players">Go to Players</Link>
-      </p>
-      <p>
-        <Link href="/orders">Go to My Orders</Link>
-      </p>
-      <p>
-        <Link href="/leaderboard">Go to Leaderboard</Link>
-      </p>
-      <p>
-        <Link href="/winners">Go to Winner History</Link>
-      </p>
-      <p>
-        <Link href="/admin">Go to Admin</Link>
-      </p>
+      <TopNav />
+      <h1>User Profile</h1>
       <RequireAuth>{(session) => <DashboardPanel userId={session.user.id} />}</RequireAuth>
     </main>
   );
 }
 
 function DashboardPanel({ userId }: { userId: string }) {
+  const router = useRouter();
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -483,14 +463,6 @@ function DashboardPanel({ userId }: { userId: string }) {
 
   return (
     <div className="grid">
-      <div className="card">
-        <h2>Today</h2>
-        <p className="muted">App date (ET): {dashboardDate}</p>
-        <button type="button" onClick={loadDashboard} disabled={busy}>
-          {busy ? "Refreshing..." : "Refresh dashboard"}
-        </button>
-      </div>
-
       {loading ? (
         <div className="card">
           <p>Loading dashboard...</p>
@@ -506,169 +478,51 @@ function DashboardPanel({ userId }: { userId: string }) {
       {!loading && !error ? (
         <>
           <div className="card">
-            <h2>Wallet</h2>
-            <p>
-              Unplanted flags:{" "}
-              <strong>{formatFlagAmount(data.wallet?.liquid_flags)}</strong>
-            </p>
-            <p>
-              FlagPlants value:{" "}
-              <strong>{formatFlagAmount(totalHoldingsMarketValue)}</strong>
-            </p>
-            <p>
-              Total net worth: <strong>{formatFlagAmount(totalNetWorth)}</strong>
-            </p>
-          </div>
-
-          <div className="card">
-            <h2>Portfolio Metrics</h2>
-            <p>
-              FlagPlants cost basis:{" "}
-              <strong>{formatFlagAmount(totalHoldingsCostBasis)}</strong>
-            </p>
-            <p>
-              Unrealized P/L:{" "}
-              <strong>{formatSignedFlag(totalUnrealizedPnl)}</strong>
-            </p>
-            <p>
-              Unrealized return:{" "}
-              <strong>
-                {totalUnrealizedPnlPct === null
-                  ? "--"
-                  : `${formatTwoDecimals(totalUnrealizedPnlPct)}%`}
-              </strong>
-            </p>
-            <p>
-              Allocation (Unplanted / Planted):{" "}
-              <strong>
-                {unplantedSharePct === null || plantedSharePct === null
-                  ? "--"
-                  : `${formatTwoDecimals(unplantedSharePct)}% / ${formatTwoDecimals(plantedSharePct)}%`}
-              </strong>
-            </p>
-            <p>
-              Top FlagPlant by value:{" "}
-              <strong>
-                {topHolding
-                  ? `${topHolding.player_name} (${formatFlagAmount(topHolding.market_value)})`
-                  : "--"}
-              </strong>
-            </p>
-            <PortfolioHistoryChart points={data.portfolioHistory} />
-          </div>
-
-          <div className="card">
-            <h2>FlagPlants</h2>
-            {data.holdings.length === 0 ? (
-              <p className="muted">No FlagPlants yet.</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Player</th>
-                    <th>Units</th>
-                    <th>Avg Cost</th>
-                    <th>Current Price</th>
-                    <th>Cost Basis</th>
-                    <th>Market Value</th>
-                    <th>Unrealized P/L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.holdings.map((holding) => (
-                    <tr key={holding.player_id}>
-                      <td>{holding.player_name}</td>
-                      <td>{formatTwoDecimals(holding.units)}</td>
-                      <td>{formatFlagAmount(holding.avg_cost_basis)}</td>
-                      <td>{formatFlagAmount(holding.current_price)}</td>
-                      <td>{formatFlagAmount(holding.cost_basis_value)}</td>
-                      <td>{formatFlagAmount(holding.market_value)}</td>
-                      <td>{formatSignedFlag(holding.unrealized_pnl)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          <div className="card">
-            <h2>Opinion Status</h2>
-            {data.todayOpinion ? (
-              <>
-                <p className="success">Submitted for today.</p>
-                <p>{data.todayOpinion.body}</p>
-              </>
-            ) : (
-              <p className="muted">Not submitted for today yet.</p>
-            )}
-          </div>
-
-          <div className="card">
-            <h2>Voting Status</h2>
-            <p>Assignments: {data.assignmentsCount}</p>
-            <p>Votes cast: {data.votesCount}</p>
-            <p>
-              Completion:{" "}
-              {data.assignmentsCount > 0
-                ? `${data.votesCount}/${data.assignmentsCount}`
-                : "0/0"}
-            </p>
-          </div>
-
-          <div className="card">
-            <h2>Latest Winner Result</h2>
-            {data.latestWinner ? (
-              <>
-                <p>Date: {data.latestWinner.winner_date}</p>
-                <p>Rank: {data.latestWinner.rank}</p>
-                <p>Votes: {data.latestWinner.votes_received}</p>
-                <p>
-                  Reward flags: {formatFlagAmount(data.latestWinner.reward_flags)}
-                </p>
-                <p>Winning opinion:</p>
-                <p>{data.latestWinner.opinion_body ?? "--"}</p>
-              </>
-            ) : (
-              <p className="muted">No winner result yet for this account.</p>
-            )}
-          </div>
-
-          <div className="card">
-            <h2>Account</h2>
-            <p>
-              Username: <strong>{data.profile?.username ?? "--"}</strong>
-            </p>
-            <p>Email: {data.profile?.email ?? "--"}</p>
-            <p>Role: {data.profile?.role ?? "--"}</p>
-            <p>
-              Followers:{" "}
-              <button
-                type="button"
-                onClick={() =>
-                  setActiveConnectionList((current) =>
-                    current === "followers" ? "none" : "followers"
-                  )
-                }
-              >
-                {data.followState?.result_follower_count ?? 0}
-              </button>
-            </p>
-            <p>
-              Following:{" "}
-              <button
-                type="button"
-                onClick={() =>
-                  setActiveConnectionList((current) =>
-                    current === "following" ? "none" : "following"
-                  )
-                }
-              >
-                {data.followState?.result_following_count ?? 0}
-              </button>
-            </p>
-            <p>
-              <Link href={`/profiles/${userId}`}>Open my public profile</Link>
-            </p>
+            <div className="account-header">
+              <h2>{data.profile?.username ?? "User Profile"}</h2>
+              <div className="account-actions">
+                <button type="button" onClick={() => router.push(`/profiles/${userId}`)}>
+                  Public Profile
+                </button>
+                {data.profile?.role === "admin" ? (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => router.push("/admin")}
+                  >
+                    Admin Mode
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="split-metrics">
+              <div>
+                <p className="muted">Followers</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActiveConnectionList((current) =>
+                      current === "followers" ? "none" : "followers"
+                    )
+                  }
+                >
+                  {data.followState?.result_follower_count ?? 0}
+                </button>
+              </div>
+              <div>
+                <p className="muted">Following</p>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setActiveConnectionList((current) =>
+                      current === "following" ? "none" : "following"
+                    )
+                  }
+                >
+                  {data.followState?.result_following_count ?? 0}
+                </button>
+              </div>
+            </div>
             {activeConnectionList !== "none" ? (
               <>
                 <p>
@@ -691,6 +545,160 @@ function DashboardPanel({ userId }: { userId: string }) {
                 )}
               </>
             ) : null}
+          </div>
+
+          <div className="dashboard-columns">
+            <div className="dashboard-column dashboard-column-left">
+              <div className="card">
+                <p className="dashboard-section-label">Ball Knowledge</p>
+              </div>
+
+              <div className="card">
+                <h2>Opinion Status</h2>
+                {data.todayOpinion ? (
+                  <>
+                    <p className="success">Submitted for today.</p>
+                    <p>{data.todayOpinion.body}</p>
+                  </>
+                ) : (
+                  <p className="muted">Not submitted for today yet.</p>
+                )}
+              </div>
+
+              <div className="card">
+                <h2>Voting Status</h2>
+                <p>Assignments: {data.assignmentsCount}</p>
+                <p>Votes cast: {data.votesCount}</p>
+                <p>
+                  Completion:{" "}
+                  {data.assignmentsCount > 0
+                    ? `${data.votesCount}/${data.assignmentsCount}`
+                    : "0/0"}
+                </p>
+              </div>
+
+              <div className="card">
+                <h2>Latest Winner Result</h2>
+                {data.latestWinner ? (
+                  <>
+                    <p>Date: {data.latestWinner.winner_date}</p>
+                    <p>Rank: {data.latestWinner.rank}</p>
+                    <p>Votes: {data.latestWinner.votes_received}</p>
+                    <p>
+                      Reward flags: {formatFlagAmount(data.latestWinner.reward_flags)}
+                    </p>
+                    <p>Winning opinion:</p>
+                    <p>{data.latestWinner.opinion_body ?? "--"}</p>
+                  </>
+                ) : (
+                  <p className="muted">No winner result yet for this account.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="dashboard-column dashboard-column-right">
+              <div className="card">
+                <p className="dashboard-section-label">Flag Market</p>
+              </div>
+
+              <div className="card">
+                <h2>Wallet</h2>
+                <p>
+                  Unplanted flags:{" "}
+                  <strong>{formatFlagAmount(data.wallet?.liquid_flags)}</strong>
+                </p>
+                <p>
+                  FlagPlants value:{" "}
+                  <strong>{formatFlagAmount(totalHoldingsMarketValue)}</strong>
+                </p>
+                <p>
+                  Total net worth: <strong>{formatFlagAmount(totalNetWorth)}</strong>
+                </p>
+              </div>
+
+              <div className="card">
+                <h2>FlagPlants</h2>
+                {data.holdings.length === 0 ? (
+                  <p className="muted">No FlagPlants yet.</p>
+                ) : (
+                  <table className="dashboard-holdings-table">
+                    <thead>
+                      <tr>
+                        <th>Player</th>
+                        <th>Units</th>
+                        <th>Avg Cost</th>
+                        <th>Current Price</th>
+                        <th>Cost Basis</th>
+                        <th>Market Value</th>
+                        <th>Unrealized P/L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.holdings.map((holding) => (
+                        <tr key={holding.player_id}>
+                          <td>
+                            <Link href={`/players/${holding.player_id}`}>
+                              {holding.player_name}
+                            </Link>
+                          </td>
+                          <td>{formatTwoDecimals(holding.units)}</td>
+                          <td>{formatFlagAmount(holding.avg_cost_basis)}</td>
+                          <td>{formatFlagAmount(holding.current_price)}</td>
+                          <td>{formatFlagAmount(holding.cost_basis_value)}</td>
+                          <td>{formatFlagAmount(holding.market_value)}</td>
+                          <td>{formatSignedFlag(holding.unrealized_pnl)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="card">
+                <h2>Portfolio Metrics</h2>
+                <p>
+                  FlagPlants cost basis:{" "}
+                  <strong>{formatFlagAmount(totalHoldingsCostBasis)}</strong>
+                </p>
+                <p>
+                  Unrealized P/L:{" "}
+                  <strong>{formatSignedFlag(totalUnrealizedPnl)}</strong>
+                </p>
+                <p>
+                  Unrealized return:{" "}
+                  <strong>
+                    {totalUnrealizedPnlPct === null
+                      ? "--"
+                      : `${formatTwoDecimals(totalUnrealizedPnlPct)}%`}
+                  </strong>
+                </p>
+                <p>
+                  Allocation (Unplanted / Planted):{" "}
+                  <strong>
+                    {unplantedSharePct === null || plantedSharePct === null
+                      ? "--"
+                      : `${formatTwoDecimals(unplantedSharePct)}% / ${formatTwoDecimals(plantedSharePct)}%`}
+                  </strong>
+                </p>
+                <p>
+                  Top FlagPlant by value:{" "}
+                  <strong>
+                    {topHolding
+                      ? `${topHolding.player_name} (${formatFlagAmount(topHolding.market_value)})`
+                      : "--"}
+                  </strong>
+                </p>
+                <PortfolioHistoryChart points={data.portfolioHistory} />
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Today</h2>
+            <p className="muted">App date (ET): {dashboardDate}</p>
+            <button type="button" onClick={loadDashboard} disabled={busy}>
+              {busy ? "Refreshing..." : "Refresh dashboard"}
+            </button>
           </div>
         </>
       ) : null}

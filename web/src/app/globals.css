@@ -90,6 +90,69 @@ main > p > a:hover {
   border-color: #d4c7b6;
 }
 
+.top-nav {
+  position: sticky;
+  top: 0.5rem;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.82);
+  backdrop-filter: blur(6px);
+}
+
+.top-nav a {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.28rem 0.72rem;
+  text-decoration: none;
+  color: var(--text);
+  background: #fffefb;
+}
+
+.top-nav a.active {
+  background: linear-gradient(180deg, var(--primary), var(--primary-strong));
+  border-color: transparent;
+  color: #fff;
+}
+
+.top-nav a.profile-link {
+  margin-left: 0;
+}
+
+.top-nav .nav-networth {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.28rem 0.72rem;
+  background: #f6efe4;
+  color: var(--text);
+  width: auto;
+  cursor: default;
+  transform: none;
+  filter: none;
+}
+
+.top-nav .nav-networth:hover {
+  transform: none;
+  filter: none;
+}
+
+.top-nav .nav-signout {
+  border: 1px solid #c4622e;
+  border-radius: 999px;
+  padding: 0.28rem 0.72rem;
+  background: linear-gradient(180deg, #c4622e, var(--secondary));
+  color: #fff;
+  width: auto;
+}
+
 .card {
   background: linear-gradient(180deg, var(--surface-strong), var(--surface));
   border: 1px solid var(--line);
@@ -202,6 +265,91 @@ code {
   padding: 0.08rem 0.38rem;
 }
 
+.split-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.tab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.two-col-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.dashboard-column {
+  display: grid;
+  gap: 0.8rem;
+  align-content: start;
+}
+
+.dashboard-section-label {
+  margin: 0;
+  font-size: 0.88rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5e5448;
+}
+
+.dashboard-holdings-table {
+  min-width: 0;
+}
+
+.account-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
+}
+
+.account-actions {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: end;
+}
+
+.order-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.order-card-badge {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.2rem 0.58rem;
+  background: #f6efe4;
+  color: var(--text);
+  width: auto;
+  cursor: default;
+  transform: none;
+  filter: none;
+}
+
+.order-card-badge:hover {
+  transform: none;
+  filter: none;
+}
+
+.order-form-gap {
+  margin-top: 0.5rem;
+}
+
 @media (max-width: 720px) {
   main {
     padding: 1.25rem 0.8rem 3.4rem;
@@ -214,5 +362,49 @@ code {
 
   button {
     width: 100%;
+  }
+
+  .top-nav {
+    top: 0.25rem;
+  }
+
+  .top-nav a {
+    flex: 1 1 calc(50% - 0.5rem);
+    justify-content: center;
+  }
+
+  .top-nav a.profile-link {
+    margin-left: 0;
+  }
+
+  .top-nav .nav-networth {
+    margin-left: 0;
+    flex: 1 1 calc(50% - 0.5rem);
+  }
+
+  .top-nav .nav-signout {
+    width: auto;
+    flex: 1 1 calc(50% - 0.5rem);
+  }
+
+  .split-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .two-col-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .account-header {
+    flex-direction: column;
+  }
+
+  .account-actions {
+    width: 100%;
+    justify-items: stretch;
   }
 }

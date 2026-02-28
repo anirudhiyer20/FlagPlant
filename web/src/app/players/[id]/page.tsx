@@ -1,9 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import PlayerPriceHistoryChart, {
+  type PlayerPriceHistoryPoint
+} from "@/components/player-price-history-chart";
 import RequireAuth from "@/components/require-auth";
+import TopNav from "@/components/top-nav";
 import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -26,6 +29,7 @@ type PendingBuySumRow = {
 };
 
 type PendingSellSumRow = {
+  flags_amount: number | null;
   units_amount: number | null;
 };
 
@@ -50,22 +54,32 @@ type OrderRow = {
   created_at: string;
 };
 
+type PlayerPriceHistoryRawRow = {
+  result_snap_date: string;
+  result_close_price: number;
+  result_day_change: number;
+  result_day_change_pct: number;
+};
+
 export default function PlayerDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const playerId = useMemo(() => params?.id ?? "", [params]);
+
+  function onBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/flag-market");
+  }
 
   return (
     <main>
-      <h1>Player Detail</h1>
-      <p>
-        <Link href="/players">Back to Players</Link>
-      </p>
-      <p>
-        <Link href="/dashboard">Go to Dashboard</Link>
-      </p>
-      <p>
-        <Link href="/orders">Go to My Orders</Link>
-      </p>
+      <TopNav />
+      <button type="button" onClick={onBack}>
+        Back
+      </button>
       <RequireAuth>
         {(session) => <PlayerDetailPanel userId={session.user.id} playerId={playerId} />}
       </RequireAuth>
@@ -82,9 +96,12 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
   });
   const [wallet, setWallet] = useState<WalletRow | null>(null);
   const [pendingBuyFlags, setPendingBuyFlags] = useState(0);
+  const [pendingBuyFlagsAll, setPendingBuyFlagsAll] = useState(0);
+  const [pendingSellFlags, setPendingSellFlags] = useState(0);
   const [pendingSellUnits, setPendingSellUnits] = useState(0);
   const [holding, setHolding] = useState<HoldingRow | null>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [priceHistory, setPriceHistory] = useState<PlayerPriceHistoryPoint[]>([]);
   const [buyAmount, setBuyAmount] = useState("");
   const [sellAmount, setSellAmount] = useState("");
   const [loading, setLoading] = useState(true);
@@ -125,9 +142,16 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       .eq("user_id", userId)
       .eq("order_type", "buy")
       .eq("status", "pending");
+    const pendingBuySumPlayerQuery = supabase
+      .from("orders")
+      .select("flags_amount")
+      .eq("user_id", userId)
+      .eq("player_id", playerId)
+      .eq("order_type", "buy")
+      .eq("status", "pending");
     const pendingSellSumQuery = supabase
       .from("orders")
-      .select("units_amount")
+      .select("flags_amount,units_amount")
       .eq("user_id", userId)
       .eq("player_id", playerId)
       .eq("order_type", "sell")
@@ -139,6 +163,10 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       .eq("player_id", playerId)
       .order("created_at", { ascending: false })
       .limit(20);
+    const priceHistoryQuery = supabase.rpc("get_player_price_history", {
+      target_player_id: playerId,
+      lookback_days: null
+    });
     const marketStatsQuery = supabase.rpc("get_player_market_stats");
 
     const [
@@ -146,16 +174,20 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       walletResult,
       holdingResult,
       pendingBuySumResult,
+      pendingBuySumPlayerResult,
       pendingSellSumResult,
       ordersResult,
+      priceHistoryResult,
       marketStatsResult
     ] = await Promise.all([
       playerQuery,
       walletQuery,
       holdingQuery,
       pendingBuySumQuery,
+      pendingBuySumPlayerQuery,
       pendingSellSumQuery,
       ordersQuery,
+      priceHistoryQuery,
       marketStatsQuery
     ]);
 
@@ -184,8 +216,18 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       setLoading(false);
       return;
     }
+    if (pendingBuySumPlayerResult.error) {
+      setError(pendingBuySumPlayerResult.error.message);
+      setLoading(false);
+      return;
+    }
     if (ordersResult.error) {
       setError(ordersResult.error.message);
+      setLoading(false);
+      return;
+    }
+    if (priceHistoryResult.error) {
+      setError(priceHistoryResult.error.message);
       setLoading(false);
       return;
     }
@@ -198,14 +240,37 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
       (sum, row) => sum + (row.flags_amount ?? 0),
       0
     );
-    setPendingBuyFlags(pendingBuyTotal);
+    setPendingBuyFlagsAll(pendingBuyTotal);
+    const pendingBuyPlayerRows = (pendingBuySumPlayerResult.data ?? []) as PendingBuySumRow[];
+    const pendingBuyPlayerTotal = pendingBuyPlayerRows.reduce(
+      (sum, row) => sum + (row.flags_amount ?? 0),
+      0
+    );
+    setPendingBuyFlags(pendingBuyPlayerTotal);
     const pendingSellRows = (pendingSellSumResult.data ?? []) as PendingSellSumRow[];
-    const pendingSellTotal = pendingSellRows.reduce(
+    const pendingSellUnitsTotal = pendingSellRows.reduce(
       (sum, row) => sum + (row.units_amount ?? 0),
       0
     );
-    setPendingSellUnits(pendingSellTotal);
+    const pendingSellFlagsTotal = pendingSellRows.reduce(
+      (sum, row) =>
+        sum +
+        (row.flags_amount ??
+          ((row.units_amount ?? 0) * ((playerResult.data as PlayerRow | null)?.current_price ?? 0))),
+      0
+    );
+    setPendingSellUnits(pendingSellUnitsTotal);
+    setPendingSellFlags(pendingSellFlagsTotal);
     setOrders((ordersResult.data ?? []) as OrderRow[]);
+    const historyRows = (priceHistoryResult.data ?? []) as PlayerPriceHistoryRawRow[];
+    setPriceHistory(
+      historyRows.map((row) => ({
+        snap_date: row.result_snap_date,
+        close_price: row.result_close_price ?? 0,
+        day_change: row.result_day_change ?? 0,
+        day_change_pct: row.result_day_change_pct ?? 0
+      }))
+    );
     const marketStatsRows = marketStatsResult.error
       ? []
       : ((marketStatsResult.data ?? []) as PlayerMarketStatsRow[]);
@@ -247,7 +312,7 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
     }
 
     const availableForNewBuys = wallet
-      ? Math.max(wallet.liquid_flags - pendingBuyFlags, 0)
+      ? Math.max(wallet.liquid_flags - pendingBuyFlagsAll, 0)
       : 0;
     if (parsed > availableForNewBuys) {
       setError(
@@ -351,113 +416,107 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
     );
   }
 
-  return (
-    <div className="grid">
-      <div className="card">
-        <h2>{player?.name ?? "Player"}</h2>
-        <p>Active: {player?.active ? "Yes" : "No"}</p>
-        <p>Seed price: {formatFlagAmount(player?.seed_price)}</p>
-        <p>Current price: {formatFlagAmount(player?.current_price)}</p>
-        <p>Baseline capital: {formatFlagAmount(player?.baseline_capital)}</p>
-        <p>Holders: {marketStats.holderCount}</p>
-        <p>Planted capital: {formatFlagAmount(marketStats.investedCapital)}</p>
-      </div>
+  const positionValueFlags = (holding?.units ?? 0) * (player?.current_price ?? 0);
+  const availableSellFlags = Math.max(positionValueFlags - pendingSellFlags, 0);
 
+  return (
+    <>
+      <h1>{player?.name ?? "Player"}</h1>
+      <div className="grid">
       <div className="card">
         <h2>Your Position</h2>
-        <p>Unplanted flags: {formatFlagAmount(wallet?.liquid_flags)}</p>
-        <p>Pending buy flags: {formatFlagAmount(pendingBuyFlags)}</p>
-        <p>Pending sell units: {formatTwoDecimals(pendingSellUnits)}</p>
+        <p>Position Value (Flags): {formatFlagAmount(positionValueFlags)}</p>
+        <p>Units Held: {holding ? formatTwoDecimals(holding.units) : "0.00"}</p>
         <p>
-          Available for new buy orders:{" "}
-          {formatFlagAmount(
-            wallet ? Math.max(wallet.liquid_flags - pendingBuyFlags, 0) : 0
-          )}
-        </p>
-        <p>
-          Estimated available sell flags:{" "}
-          {formatFlagAmount(
-            Math.max((holding?.units ?? 0) - pendingSellUnits, 0) *
-              (player?.current_price ?? 0)
-          )}
-        </p>
-        <p>
-          Available for new sell orders:{" "}
-          {formatTwoDecimals(Math.max((holding?.units ?? 0) - pendingSellUnits, 0))}
-        </p>
-        <p>Units held: {holding ? formatTwoDecimals(holding.units) : "0.00"}</p>
-        <p>
-          Avg cost basis:{" "}
+          Avg. Cost Basis:{" "}
           {holding ? formatFlagAmount(holding.avg_cost_basis) : formatFlagAmount(0)}
         </p>
+        <p>Pending Buy Flags: {formatFlagAmount(pendingBuyFlags)}</p>
+        <p>Pending Sell Flags: {formatFlagAmount(pendingSellFlags)}</p>
+      </div>
+
+      <div className="two-col-cards">
+        <div className="card">
+          <div className="order-card-header">
+            <h2>Place Buy Order</h2>
+            <button type="button" className="order-card-badge" disabled>
+              Unplanted Flags: {formatFlagAmount(wallet?.liquid_flags)}
+            </button>
+          </div>
+          <p className="muted">
+            Creates a pending buy order. Admin order-clearing executes it at the current
+            market price.
+          </p>
+          <form className="grid order-form-gap" onSubmit={submitBuyOrder}>
+            <label>
+              Flags Amount
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={buyAmount}
+                onChange={(e) => setBuyAmount(e.target.value)}
+                required
+              />
+            </label>
+            <button type="submit" disabled={busy}>
+              {busy ? "Submitting..." : "Create Buy Order"}
+            </button>
+          </form>
+          <p className="muted">
+            Estimated Units At Current Price:{" "}
+            {formatTwoDecimals(
+              (Number.parseFloat(buyAmount || "0") || 0) / (player?.current_price || 1)
+            )}
+          </p>
+          {message ? <p className="success">{message}</p> : null}
+          {error ? <p className="error">{error}</p> : null}
+        </div>
+
+        <div className="card">
+          <div className="order-card-header">
+            <h2>Place Sell Order</h2>
+            <button type="button" className="order-card-badge" disabled>
+              Available To Sell: {formatFlagAmount(availableSellFlags)}
+            </button>
+          </div>
+          <p className="muted">
+            Creates a pending sell order. Admin order-clearing executes it at the current market price.
+          </p>
+          <form className="grid order-form-gap" onSubmit={submitSellOrder}>
+            <label>
+              Flags Amount
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={sellAmount}
+                onChange={(e) => setSellAmount(e.target.value)}
+                required
+              />
+            </label>
+            <button type="submit" disabled={busy}>
+              {busy ? "Submitting..." : "Create Sell Order"}
+            </button>
+          </form>
+          <p className="muted">
+            Estimated Units At Current Price:{" "}
+            {formatTwoDecimals(
+              (Number.parseFloat(sellAmount || "0") || 0) / (player?.current_price || 1)
+            )}
+          </p>
+          {message ? <p className="success">{message}</p> : null}
+          {error ? <p className="error">{error}</p> : null}
+        </div>
       </div>
 
       <div className="card">
-        <h2>Place Buy Order</h2>
-        <p className="muted">
-          Creates a pending buy order. Admin order-clearing executes it at the current
-          market price.
-        </p>
-        <form className="grid" onSubmit={submitBuyOrder}>
-          <label>
-            Flags amount
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={buyAmount}
-              onChange={(e) => setBuyAmount(e.target.value)}
-              required
-            />
-          </label>
-          <button type="submit" disabled={busy}>
-            {busy ? "Submitting..." : "Create Buy Order"}
-          </button>
-        </form>
-        <p className="muted">
-          Estimated units at current price:{" "}
-          {formatTwoDecimals(
-            (Number.parseFloat(buyAmount || "0") || 0) / (player?.current_price || 1)
-          )}
-        </p>
-        {message ? <p className="success">{message}</p> : null}
-        {error ? <p className="error">{error}</p> : null}
+        <h2>Historical Price Movement</h2>
+        <PlayerPriceHistoryChart points={priceHistory} />
       </div>
 
       <div className="card">
-        <h2>Place Sell Order</h2>
-        <p className="muted">
-          Enter sell amount in flags. The app converts to estimated units at current
-          price and creates a pending sell order.
-        </p>
-        <form className="grid" onSubmit={submitSellOrder}>
-          <label>
-            Flags amount
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={sellAmount}
-              onChange={(e) => setSellAmount(e.target.value)}
-              required
-            />
-          </label>
-          <button type="submit" disabled={busy}>
-            {busy ? "Submitting..." : "Create Sell Order"}
-          </button>
-        </form>
-        <p className="muted">
-          Estimated units at current price:{" "}
-          {formatTwoDecimals(
-            (Number.parseFloat(sellAmount || "0") || 0) / (player?.current_price || 1)
-          )}
-        </p>
-        {message ? <p className="success">{message}</p> : null}
-        {error ? <p className="error">{error}</p> : null}
-      </div>
-
-      <div className="card">
-        <h2>Your Recent Orders For This Player</h2>
+        <h2>Recent Orders</h2>
         {orders.length === 0 ? (
           <p className="muted">No orders yet.</p>
         ) : (
@@ -493,6 +552,17 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
           </table>
         )}
       </div>
-    </div>
+
+      <div className="card">
+        <h2>{player?.name ?? "Player"}</h2>
+        <p>Active: {player?.active ? "Yes" : "No"}</p>
+        <p>Seed Price: {formatFlagAmount(player?.seed_price)}</p>
+        <p>Current Price: {formatFlagAmount(player?.current_price)}</p>
+        <p>Baseline Capital: {formatFlagAmount(player?.baseline_capital)}</p>
+        <p>Holders: {marketStats.holderCount}</p>
+        <p>Planted Capital: {formatFlagAmount(marketStats.investedCapital)}</p>
+      </div>
+      </div>
+    </>
   );
 }

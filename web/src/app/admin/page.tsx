@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
+import TopNav from "@/components/top-nav";
 import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -115,21 +116,23 @@ type DailyCloseStepRawRow = {
 };
 
 export default function AdminPage() {
+  const router = useRouter();
+
+  function onBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.push("/dashboard");
+  }
+
   return (
     <main>
+      <TopNav />
       <h1>Admin</h1>
-      <p>
-        <Link href="/">Back to Home</Link>
-      </p>
-      <p>
-        <Link href="/dashboard">Go to Dashboard</Link>
-      </p>
-      <p>
-        <Link href="/vote">Go to Vote</Link>
-      </p>
-      <p>
-        <Link href="/orders">Go to My Orders</Link>
-      </p>
+      <button type="button" onClick={onBack}>
+        Back
+      </button>
       <RequireAuth>{(session) => <AdminPanel userId={session.user.id} />}</RequireAuth>
     </main>
   );

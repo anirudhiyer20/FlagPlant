@@ -122,10 +122,13 @@ Also run `supabase/patch_order_budget_policy.sql` once to enforce combined
 pending buy-order budget limits against wallet balance.
 Also run `supabase/patch_order_execution.sql` once to add admin order-clearing
 RPC tools (pending buy/sell execution into holdings/wallet/ledger).
+Also run `supabase/patch_order_cancellation.sql` once to add authenticated pending-order cancellation RPC.
 Also run `supabase/patch_repricing.sql` once to add admin repricing preview/apply
 RPC tools (price updates based on executed order flow).
 Also run `supabase/patch_player_market_stats.sql` once to add player card market
 stats RPC (`holders` and `invested capital`).
+Also run `supabase/patch_player_price_history.sql` once to add player historical
+price RPC for charting (`7d`, `30d`, `all-time`).
 Also run `supabase/patch_leaderboard.sql` once to add leaderboard snapshot RPC.
 Also run `supabase/patch_leaderboard_scope.sql` once to add server-side friends-only leaderboard filtering RPC.
 Also run `supabase/patch_public_profiles.sql` once to add public profile view RPCs.
@@ -144,16 +147,18 @@ Run in Supabase SQL Editor in this order:
 3. `supabase/patch_admin_winners.sql`
 4. `supabase/patch_order_budget_policy.sql`
 5. `supabase/patch_order_execution.sql`
-6. `supabase/patch_repricing.sql`
-7. `supabase/patch_player_market_stats.sql`
-8. `supabase/patch_leaderboard.sql`
-9. `supabase/patch_leaderboard_scope.sql`
-10. `supabase/patch_public_profiles.sql`
-11. `supabase/patch_winner_history.sql`
-12. `supabase/patch_portfolio_history.sql`
-13. `supabase/patch_portfolio_persistence.sql`
-14. `supabase/patch_follows.sql`
-15. `supabase/patch_daily_close.sql`
+6. `supabase/patch_order_cancellation.sql`
+7. `supabase/patch_repricing.sql`
+8. `supabase/patch_player_market_stats.sql`
+9. `supabase/patch_player_price_history.sql`
+10. `supabase/patch_leaderboard.sql`
+11. `supabase/patch_leaderboard_scope.sql`
+12. `supabase/patch_public_profiles.sql`
+13. `supabase/patch_winner_history.sql`
+14. `supabase/patch_portfolio_history.sql`
+15. `supabase/patch_portfolio_persistence.sql`
+16. `supabase/patch_follows.sql`
+17. `supabase/patch_daily_close.sql`
 
 ### SQL Smoke Tests
 
