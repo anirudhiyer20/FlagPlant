@@ -6,6 +6,7 @@ import RequireAuth from "@/components/require-auth";
 import TopNav from "@/components/top-nav";
 import { formatEasternDateTime, getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
+import { LEAGUE_OPTIONS } from "@/lib/leagues";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type WinnerRow = {
@@ -100,9 +101,20 @@ type RepricingRow = {
 type AdminPlayerRow = {
   id: string;
   name: string;
+  league: string;
   seed_price: number;
   current_price: number;
   updated_at: string;
+};
+
+type CreatedPlayerRow = {
+  result_player_id: string;
+  result_player_name: string;
+  result_league: string;
+  result_seed_price: number;
+  result_current_price: number;
+  result_active: boolean;
+  result_created_at: string;
 };
 
 type PriceOverrideResultRow = {
@@ -208,6 +220,51 @@ type OrderExecutionActivityRawRow = {
   result_failed_orders?: number;
 };
 
+type AdminSectionKey =
+  | "pipeline"
+  | "diagnostics"
+  | "winners"
+  | "orders"
+  | "players"
+  | "pricing";
+
+const ADMIN_SECTION_OPTIONS: {
+  key: AdminSectionKey;
+  label: string;
+  description: string;
+}[] = [
+  {
+    key: "pipeline",
+    label: "Daily Close",
+    description: "Run the full close pipeline for the selected ET date."
+  },
+  {
+    key: "diagnostics",
+    label: "Diagnostics",
+    description: "Inspect close/publish health, system jobs, and execution activity."
+  },
+  {
+    key: "winners",
+    label: "Winners",
+    description: "Preview and publish winners for the selected ET date."
+  },
+  {
+    key: "orders",
+    label: "Orders",
+    description: "Preview and execute pending buy/sell orders."
+  },
+  {
+    key: "players",
+    label: "Players",
+    description: "Add new players to the market and assign their league."
+  },
+  {
+    key: "pricing",
+    label: "Pricing",
+    description: "Apply manual price overrides and repricing."
+  }
+];
+
 export default function AdminPage() {
   const router = useRouter();
 
@@ -254,6 +311,7 @@ function formatOrderTypeLabel(orderType: string): string {
 function AdminPanel({ userId }: { userId: string }) {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [selectedDate, setSelectedDate] = useState(getEasternDateString());
+  const [activeSection, setActiveSection] = useState<AdminSectionKey>("pipeline");
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [loadingRole, setLoadingRole] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -267,6 +325,12 @@ function AdminPanel({ userId }: { userId: string }) {
   const [previewRows, setPreviewRows] = useState<WinnerRow[]>([]);
   const [publishedRows, setPublishedRows] = useState<PublishedRow[]>([]);
   const [overridePlayers, setOverridePlayers] = useState<AdminPlayerRow[]>([]);
+  const [newPlayerName, setNewPlayerName] = useState("");
+  const [newPlayerLeague, setNewPlayerLeague] = useState<string>(LEAGUE_OPTIONS[0]);
+  const [newPlayerInitialPrice, setNewPlayerInitialPrice] = useState("");
+  const [newPlayerActive, setNewPlayerActive] = useState(true);
+  const [creatingPlayer, setCreatingPlayer] = useState(false);
+  const [createdPlayer, setCreatedPlayer] = useState<CreatedPlayerRow | null>(null);
   const [selectedOverridePlayerId, setSelectedOverridePlayerId] = useState("");
   const [overridePrice, setOverridePrice] = useState("");
   const [overrideReason, setOverrideReason] = useState("");
@@ -293,6 +357,18 @@ function AdminPanel({ userId }: { userId: string }) {
   >([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const activeSectionOption =
+    ADMIN_SECTION_OPTIONS.find((option) => option.key === activeSection) ??
+    ADMIN_SECTION_OPTIONS[0];
+  const controlsBusy =
+    loading ||
+    publishing ||
+    executingOrders ||
+    executingSellOrders ||
+    repricingBusy ||
+    dailyCloseBusy ||
+    overrideBusy ||
+    creatingPlayer;
   const selectedOverridePlayer = overridePlayers.find(
     (row) => row.id === selectedOverridePlayerId
   );
@@ -393,7 +469,8 @@ function AdminPanel({ userId }: { userId: string }) {
 
     const { data, error: playersError } = await supabase
       .from("players")
-      .select("id,name,seed_price,current_price,updated_at")
+      .select("id,name,league,seed_price,current_price,updated_at")
+      .order("league", { ascending: true })
       .order("name", { ascending: true });
 
     if (playersError) {
@@ -769,6 +846,63 @@ function AdminPanel({ userId }: { userId: string }) {
     setOverrideBusy(false);
   }
 
+  async function createPlayer() {
+    setCreatingPlayer(true);
+    setMessage("");
+    setError("");
+
+    const normalizedName = newPlayerName.trim();
+    const normalizedLeague = newPlayerLeague.trim().toUpperCase();
+    const parsedInitialPrice = Number.parseFloat(newPlayerInitialPrice);
+
+    if (normalizedName.length === 0) {
+      setError("Enter a player name.");
+      setCreatingPlayer(false);
+      return;
+    }
+
+    if (!LEAGUE_OPTIONS.includes(normalizedLeague as (typeof LEAGUE_OPTIONS)[number])) {
+      setError(`League must be one of: ${LEAGUE_OPTIONS.join(", ")}.`);
+      setCreatingPlayer(false);
+      return;
+    }
+
+    if (!Number.isFinite(parsedInitialPrice) || parsedInitialPrice <= 0) {
+      setError("Enter a valid initial price greater than 0.");
+      setCreatingPlayer(false);
+      return;
+    }
+
+    const { data, error: createError } = await supabase.rpc("admin_create_player", {
+      target_name: normalizedName,
+      target_league: normalizedLeague,
+      initial_price: parsedInitialPrice,
+      target_active: newPlayerActive
+    });
+
+    if (createError) {
+      setError(createError.message);
+      setCreatingPlayer(false);
+      return;
+    }
+
+    const row = ((data ?? []) as CreatedPlayerRow[])[0] ?? null;
+    if (!row) {
+      setError("Player creation completed but no result row returned.");
+      setCreatingPlayer(false);
+      return;
+    }
+
+    setCreatedPlayer(row);
+    setMessage(
+      `Player created: ${row.result_player_name} (${row.result_league}) at ${formatFlagAmount(row.result_current_price)}.`
+    );
+    setNewPlayerName("");
+    setNewPlayerInitialPrice("");
+    await loadManualOverridePlayers();
+    setCreatingPlayer(false);
+  }
+
   async function publishWinners() {
     setPublishing(true);
     setMessage("");
@@ -813,6 +947,36 @@ function AdminPanel({ userId }: { userId: string }) {
   return (
     <div className="grid">
       <div className="card">
+        <h2>Admin Workspace</h2>
+        <div className="grid">
+          <label>
+            Target Date (ET)
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              disabled={controlsBusy}
+            />
+          </label>
+          <div className="tab-row">
+            {ADMIN_SECTION_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={activeSection === option.key ? "" : "secondary"}
+                onClick={() => setActiveSection(option.key)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p className="muted">{activeSectionOption.description}</p>
+          {message ? <p className="success">{message}</p> : null}
+          {error ? <p className="error">{error}</p> : null}
+        </div>
+      </div>
+
+      <div className={activeSection === "pipeline" ? "card" : "card admin-card-hidden"}>
       <h2>Daily Close Pipeline</h2>
       <div className="grid">
         <button
@@ -858,7 +1022,7 @@ function AdminPanel({ userId }: { userId: string }) {
 
       </div>
 
-      <div className="card">
+      <div className={activeSection === "diagnostics" ? "card" : "card admin-card-hidden"}>
       <h2>Diagnostics</h2>
       <p className="muted">
         Selected-date health checks plus recent job and order-execution activity.
@@ -1057,17 +1221,9 @@ function AdminPanel({ userId }: { userId: string }) {
       )}
       </div>
 
-      <div className="card">
+      <div className={activeSection === "winners" ? "card" : "card admin-card-hidden"}>
       <h2>Winner Tools</h2>
       <div className="grid">
-        <label>
-          Target vote/close date (ET)
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-          />
-        </label>
         <button
           type="button"
           onClick={loadPreview}
@@ -1092,12 +1248,9 @@ function AdminPanel({ userId }: { userId: string }) {
         </button>
       </div>
 
-      {message ? <p className="success">{message}</p> : null}
-      {error ? <p className="error">{error}</p> : null}
-
       </div>
 
-      <div className="card">
+      <div className={activeSection === "winners" ? "card" : "card admin-card-hidden"}>
       <h2>Preview</h2>
       {previewRows.length === 0 ? (
         <p className="muted">No preview rows loaded yet.</p>
@@ -1126,7 +1279,7 @@ function AdminPanel({ userId }: { userId: string }) {
 
       </div>
 
-      <div className="card">
+      <div className={activeSection === "winners" ? "card" : "card admin-card-hidden"}>
       <h2>Published For Date</h2>
       {publishedRows.length === 0 ? (
         <p className="muted">No published winners found for selected date.</p>
@@ -1155,7 +1308,7 @@ function AdminPanel({ userId }: { userId: string }) {
 
       </div>
 
-      <div className="card">
+      <div className={activeSection === "orders" ? "card" : "card admin-card-hidden"}>
       <h2>Order Clearing: Buy Orders</h2>
       <div className="grid">
         <button
@@ -1250,7 +1403,7 @@ function AdminPanel({ userId }: { userId: string }) {
 
       </div>
 
-      <div className="card">
+      <div className={activeSection === "orders" ? "card" : "card admin-card-hidden"}>
       <h2>Order Clearing: Sell Orders</h2>
       <div className="grid">
         <button
@@ -1347,7 +1500,103 @@ function AdminPanel({ userId }: { userId: string }) {
 
       </div>
 
-      <div className="card">
+      <div className={activeSection === "players" ? "card" : "card admin-card-hidden"}>
+      <h2>Add Player To Market</h2>
+      <p className="muted">
+        Creates a new market player with the provided name, league, and initial price.
+      </p>
+      <div className="grid">
+        <label>
+          Player Name
+          <input
+            value={newPlayerName}
+            onChange={(e) => setNewPlayerName(e.target.value)}
+            maxLength={120}
+            disabled={creatingPlayer || controlsBusy}
+            placeholder="e.g. Caitlin Clark"
+          />
+        </label>
+        <label>
+          League
+          <select
+            value={newPlayerLeague}
+            onChange={(e) => setNewPlayerLeague(e.target.value)}
+            disabled={creatingPlayer || controlsBusy}
+          >
+            {LEAGUE_OPTIONS.map((league) => (
+              <option key={league} value={league}>
+                {league}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Initial Price
+          <input
+            type="number"
+            min="0.000001"
+            step="0.000001"
+            value={newPlayerInitialPrice}
+            onChange={(e) => setNewPlayerInitialPrice(e.target.value)}
+            disabled={creatingPlayer || controlsBusy}
+            placeholder="e.g. 175"
+          />
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={newPlayerActive}
+            onChange={(e) => setNewPlayerActive(e.target.checked)}
+            disabled={creatingPlayer || controlsBusy}
+          />{" "}
+          Active In Market
+        </label>
+        <div className="tab-row">
+          <button
+            type="button"
+            className="secondary"
+            onClick={createPlayer}
+            disabled={creatingPlayer || controlsBusy}
+          >
+            {creatingPlayer ? "Creating..." : "Create Player"}
+          </button>
+          <button
+            type="button"
+            onClick={loadManualOverridePlayers}
+            disabled={overrideLoading || controlsBusy}
+          >
+            {overrideLoading ? "Refreshing..." : "Refresh Player List"}
+          </button>
+        </div>
+      </div>
+
+      {createdPlayer ? (
+        <table className="table-top-space">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>League</th>
+              <th>Seed Price</th>
+              <th>Current Price</th>
+              <th>Active</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>{createdPlayer.result_player_name}</td>
+              <td>{createdPlayer.result_league}</td>
+              <td>{formatFlagAmount(createdPlayer.result_seed_price)}</td>
+              <td>{formatFlagAmount(createdPlayer.result_current_price)}</td>
+              <td>{createdPlayer.result_active ? "Yes" : "No"}</td>
+              <td>{formatEasternDateTime(createdPlayer.result_created_at)}</td>
+            </tr>
+          </tbody>
+        </table>
+      ) : null}
+      </div>
+
+      <div className={activeSection === "pricing" ? "card" : "card admin-card-hidden"}>
       <h2>Manual Price Override</h2>
       <p className="muted">
         Admin-only emergency control. This updates a player&apos;s current price
@@ -1478,7 +1727,7 @@ function AdminPanel({ userId }: { userId: string }) {
 
       </div>
 
-      <div className="card">
+      <div className={activeSection === "pricing" ? "card" : "card admin-card-hidden"}>
       <h2>Repricing</h2>
       <div className="grid">
         <button

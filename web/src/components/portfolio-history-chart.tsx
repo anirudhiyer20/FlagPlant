@@ -2,9 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
+import { getLeagueBadgeStyle, normalizeLeagueLabel } from "@/lib/leagues";
 
 export type PortfolioHistoryHolding = {
   player_name: string;
+  player_league?: string | null;
   units: number;
   value: number;
 };
@@ -169,7 +171,19 @@ export default function PortfolioHistoryChart({
             <tbody>
               {hovered.holdings.map((holding) => (
                 <tr key={`${hovered.snap_date}-${holding.player_name}`}>
-                  <td>{holding.player_name}</td>
+                  <td>
+                    <span className="player-cell-with-league">
+                      <span>{holding.player_name}</span>
+                      <span
+                        className="league-badge"
+                        style={getLeagueBadgeStyle(
+                          normalizeLeagueLabel(holding.player_league)
+                        )}
+                      >
+                        {normalizeLeagueLabel(holding.player_league)}
+                      </span>
+                    </span>
+                  </td>
                   <td>{formatTwoDecimals(holding.units)}</td>
                   <td>{formatFlagAmount(holding.value)}</td>
                 </tr>

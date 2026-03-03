@@ -114,6 +114,7 @@ create table if not exists public.daily_winners (
 create table if not exists public.players (
   id uuid primary key default gen_random_uuid(),
   name text unique not null,
+  league text not null default 'NBA' check (char_length(btrim(league)) between 2 and 32),
   active boolean not null default true,
   seed_price numeric(18,6) not null check (seed_price > 0),
   current_price numeric(18,6) not null check (current_price > 0),
@@ -226,6 +227,7 @@ create index if not exists idx_user_follows_followed_created_at on public.user_f
 create index if not exists idx_user_follows_follower_created_at on public.user_follows (follower_user_id, created_at desc);
 create index if not exists idx_holdings_user_active on public.holdings (user_id) where units > 0.005::numeric;
 create index if not exists idx_profiles_username_trgm on public.profiles using gin (username gin_trgm_ops);
+create index if not exists idx_players_league_active_name on public.players (league, active, name);
 
 -- ===== Trigger: updated_at =====
 create or replace function public.set_updated_at()
@@ -2444,6 +2446,83 @@ $$;
 
 revoke all on function public.admin_override_player_price(uuid, numeric, text) from public;
 grant execute on function public.admin_override_player_price(uuid, numeric, text) to authenticated;
+
+create or replace function public.admin_create_player(
+  target_name text,
+  target_league text,
+  initial_price numeric(18,6),
+  target_active boolean default true
+)
+returns table (
+  result_player_id uuid,
+  result_player_name text,
+  result_league text,
+  result_seed_price numeric(18,6),
+  result_current_price numeric(18,6),
+  result_active boolean,
+  result_created_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  normalized_name text;
+  normalized_league text;
+begin
+  perform public.assert_admin();
+
+  normalized_name := nullif(btrim(target_name), '');
+  normalized_league := upper(nullif(btrim(target_league), ''));
+
+  if normalized_name is null then
+    raise exception 'target_name is required';
+  end if;
+
+  if normalized_league is null then
+    raise exception 'target_league is required';
+  end if;
+
+  if char_length(normalized_league) < 2 or char_length(normalized_league) > 32 then
+    raise exception 'target_league must be between 2 and 32 characters';
+  end if;
+
+  if normalized_league <> all (array['NFL', 'NHL', 'MLB', 'WNBA']) then
+    raise exception 'target_league must be one of NFL, NHL, MLB, WNBA';
+  end if;
+
+  if initial_price is null or initial_price <= 0 then
+    raise exception 'initial_price must be > 0';
+  end if;
+
+  return query
+  insert into public.players (
+    name,
+    league,
+    active,
+    seed_price,
+    current_price
+  )
+  values (
+    normalized_name,
+    normalized_league,
+    coalesce(target_active, true),
+    round(initial_price, 6),
+    round(initial_price, 6)
+  )
+  returning
+    id as result_player_id,
+    name as result_player_name,
+    league as result_league,
+    seed_price as result_seed_price,
+    current_price as result_current_price,
+    active as result_active,
+    created_at as result_created_at;
+end;
+$$;
+
+revoke all on function public.admin_create_player(text, text, numeric, boolean) from public;
+grant execute on function public.admin_create_player(text, text, numeric, boolean) to authenticated;
 
 create or replace function public.admin_snapshot_daily_user_metrics(
   target_date date default public.app_current_date_est()

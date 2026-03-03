@@ -13,6 +13,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/ui-states";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
+import { getLeagueBadgeStyle, normalizeLeagueLabel } from "@/lib/leagues";
 
 type ProfileRow = {
   username: string;
@@ -47,12 +48,14 @@ type HoldingRawRow = {
 type PlayerLookupRow = {
   id: string;
   name: string;
+  league: string;
   current_price: number;
 };
 
 type HoldingViewRow = {
   player_id: string;
   player_name: string;
+  player_league: string;
   units: number;
   avg_cost_basis: number;
   current_price: number;
@@ -105,6 +108,8 @@ function parseHistoryHoldings(raw: unknown): PortfolioHistoryPoint["holdings"] {
       return {
         player_name:
           typeof row.player_name === "string" ? row.player_name : "Unknown",
+        player_league:
+          typeof row.player_league === "string" ? row.player_league : null,
         units:
           typeof row.units === "number"
             ? row.units
@@ -281,10 +286,10 @@ function DashboardPanel({ userId }: { userId: string }) {
     let playerMap = new Map<string, PlayerLookupRow>();
 
     if (playerIds.length > 0) {
-      const { data: playersData, error: playersError } = await supabase
-        .from("players")
-        .select("id,name,current_price")
-        .in("id", playerIds);
+        const { data: playersData, error: playersError } = await supabase
+          .from("players")
+          .select("id,name,league,current_price")
+          .in("id", playerIds);
 
       if (playersError) {
         setError(playersError.message);
@@ -305,6 +310,7 @@ function DashboardPanel({ userId }: { userId: string }) {
         return {
           player_id: row.player_id,
           player_name: player.name,
+          player_league: normalizeLeagueLabel(player.league),
           units: row.units,
           avg_cost_basis: row.avg_cost_basis,
           current_price: player.current_price,
@@ -316,12 +322,51 @@ function DashboardPanel({ userId }: { userId: string }) {
       .filter((row): row is HoldingViewRow => row !== null);
 
     const historyRows = (portfolioHistoryResult.data ?? []) as PortfolioHistoryRawRow[];
-    const portfolioHistory = historyRows.map((row) => ({
+    const parsedPortfolioHistory = historyRows.map((row) => ({
       snap_date: row.result_snap_date,
       unplanted_close: row.result_unplanted_flags_close ?? 0,
       planted_close: row.result_planted_value_close ?? 0,
       total_close: row.result_total_value_close ?? 0,
       holdings: parseHistoryHoldings(row.result_holdings_json)
+    }));
+    const historyPlayerNames = [
+      ...new Set(
+        parsedPortfolioHistory.flatMap((point) =>
+          point.holdings.map((holding) => holding.player_name)
+        )
+      )
+    ].filter((name) => name.length > 0 && name !== "Unknown");
+    let historyLeagueByName = new Map<string, string>();
+
+    if (historyPlayerNames.length > 0) {
+      const { data: historyPlayersData, error: historyPlayersError } = await supabase
+        .from("players")
+        .select("name,league")
+        .in("name", historyPlayerNames);
+
+      if (historyPlayersError) {
+        setError(historyPlayersError.message);
+        setBusy(false);
+        setLoading(false);
+        return;
+      }
+
+      historyLeagueByName = new Map(
+        ((historyPlayersData ?? []) as { name: string; league: string }[]).map((row) => [
+          row.name,
+          row.league
+        ])
+      );
+    }
+
+    const portfolioHistory = parsedPortfolioHistory.map((point) => ({
+      ...point,
+      holdings: point.holdings.map((holding) => ({
+        ...holding,
+        player_league: normalizeLeagueLabel(
+          historyLeagueByName.get(holding.player_name) ?? holding.player_league
+        )
+      }))
     }));
     const followStateRows = (followStateResult.data ?? []) as FollowStateRow[];
     const followState = followStateRows[0] ?? null;
@@ -528,6 +573,14 @@ function DashboardPanel({ userId }: { userId: string }) {
                   <EmptyState message="No Winner Result Yet For This Account." />
                 )}
               </div>
+
+              <div className="card">
+                <h2>Today</h2>
+                <p className="muted">App date (ET): {dashboardDate}</p>
+                <button type="button" onClick={loadDashboard} disabled={busy}>
+                  {busy ? "Refreshing..." : "Refresh dashboard"}
+                </button>
+              </div>
             </div>
 
             <div className="dashboard-column dashboard-column-right">
@@ -556,6 +609,15 @@ function DashboardPanel({ userId }: { userId: string }) {
                   <EmptyState message="No FlagPlants yet." />
                 ) : (
                   <table className="dashboard-holdings-table">
+                    <colgroup>
+                      <col className="dashboard-holdings-col-player" />
+                      <col />
+                      <col />
+                      <col />
+                      <col />
+                      <col />
+                      <col />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>Player</th>
@@ -571,9 +633,19 @@ function DashboardPanel({ userId }: { userId: string }) {
                       {data.holdings.map((holding) => (
                         <tr key={holding.player_id}>
                           <td>
-                            <Link href={`/players/${holding.player_id}`}>
-                              {holding.player_name}
-                            </Link>
+                            <span className="dashboard-player-cell">
+                              <Link href={`/players/${holding.player_id}`}>
+                                <span className="dashboard-player-name">
+                                  {holding.player_name}
+                                </span>
+                              </Link>
+                              <span
+                                className="league-badge"
+                                style={getLeagueBadgeStyle(holding.player_league)}
+                              >
+                                {holding.player_league}
+                              </span>
+                            </span>
                           </td>
                           <td>{formatTwoDecimals(holding.units)}</td>
                           <td>{formatFlagAmount(holding.avg_cost_basis)}</td>
@@ -618,21 +690,24 @@ function DashboardPanel({ userId }: { userId: string }) {
                   Top FlagPlant By Value:{" "}
                   <strong>
                     {topHolding
-                      ? `${topHolding.player_name} (${formatFlagAmount(topHolding.market_value)})`
+                      ? (
+                        <span className="player-cell-with-league">
+                          <span>{topHolding.player_name}</span>
+                          <span
+                            className="league-badge"
+                            style={getLeagueBadgeStyle(topHolding.player_league)}
+                          >
+                            {topHolding.player_league}
+                          </span>
+                          <span>({formatFlagAmount(topHolding.market_value)})</span>
+                        </span>
+                      )
                       : "--"}
                   </strong>
                 </p>
                 <PortfolioHistoryChart points={data.portfolioHistory} />
               </div>
             </div>
-          </div>
-
-          <div className="card">
-            <h2>Today</h2>
-            <p className="muted">App date (ET): {dashboardDate}</p>
-            <button type="button" onClick={loadDashboard} disabled={busy}>
-              {busy ? "Refreshing..." : "Refresh dashboard"}
-            </button>
           </div>
         </>
       ) : null}

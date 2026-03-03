@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
@@ -8,6 +9,7 @@ import PortfolioHistoryChart, {
 } from "@/components/portfolio-history-chart";
 import TopNav from "@/components/top-nav";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
+import { getLeagueBadgeStyle, normalizeLeagueLabel } from "@/lib/leagues";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type PublicProfileSnapshotRow = {
@@ -34,6 +36,7 @@ type PublicProfileSnapshotRow = {
 type PublicProfileHoldingRow = {
   result_player_id: string;
   result_player_name: string;
+  result_player_league: string;
   result_units: number;
   result_avg_cost_basis: number;
   result_current_price: number;
@@ -74,6 +77,8 @@ function parseHistoryHoldings(raw: unknown): PortfolioHistoryPoint["holdings"] {
       return {
         player_name:
           typeof row.player_name === "string" ? row.player_name : "Unknown",
+        player_league:
+          typeof row.player_league === "string" ? row.player_league : null,
         units:
           typeof row.units === "number"
             ? row.units
@@ -219,15 +224,98 @@ function PublicProfilePanel({
 
     const snapshotRows = (snapshotResult.data ?? []) as PublicProfileSnapshotRow[];
     setSnapshot(snapshotRows[0] ?? null);
-    setHoldings((holdingsResult.data ?? []) as PublicProfileHoldingRow[]);
+
+    const rawHoldings = (holdingsResult.data ?? []) as Omit<
+      PublicProfileHoldingRow,
+      "result_player_league"
+    >[];
+    const holdingPlayerIds = [...new Set(rawHoldings.map((row) => row.result_player_id))];
+    let holdingLeagueByPlayerId = new Map<string, string>();
+
+    if (holdingPlayerIds.length > 0) {
+      const { data: holdingPlayersData, error: holdingPlayersError } = await supabase
+        .from("players")
+        .select("id,league")
+        .in("id", holdingPlayerIds);
+
+      if (holdingPlayersError) {
+        setError(holdingPlayersError.message);
+        setSnapshot(null);
+        setHoldings([]);
+        setPortfolioHistory([]);
+        setFollowState(null);
+        setLoading(false);
+        setBusy(false);
+        return;
+      }
+
+      holdingLeagueByPlayerId = new Map(
+        ((holdingPlayersData ?? []) as { id: string; league: string }[]).map((row) => [
+          row.id,
+          row.league
+        ])
+      );
+    }
+
+    const holdings = rawHoldings.map((row) => ({
+      ...row,
+      result_player_league: normalizeLeagueLabel(
+        holdingLeagueByPlayerId.get(row.result_player_id)
+      )
+    }));
+    setHoldings(holdings);
+
     const historyRows = (portfolioHistoryResult.data ?? []) as PortfolioHistoryRawRow[];
-    setPortfolioHistory(
-      historyRows.map((row) => ({
+    const parsedPortfolioHistory = historyRows.map((row) => ({
         snap_date: row.result_snap_date,
         unplanted_close: row.result_unplanted_flags_close ?? 0,
         planted_close: row.result_planted_value_close ?? 0,
         total_close: row.result_total_value_close ?? 0,
         holdings: parseHistoryHoldings(row.result_holdings_json)
+      }));
+    const historyPlayerNames = [
+      ...new Set(
+        parsedPortfolioHistory.flatMap((point) =>
+          point.holdings.map((holding) => holding.player_name)
+        )
+      )
+    ].filter((name) => name.length > 0 && name !== "Unknown");
+    let historyLeagueByName = new Map<string, string>();
+
+    if (historyPlayerNames.length > 0) {
+      const { data: historyPlayersData, error: historyPlayersError } = await supabase
+        .from("players")
+        .select("name,league")
+        .in("name", historyPlayerNames);
+
+      if (historyPlayersError) {
+        setError(historyPlayersError.message);
+        setSnapshot(null);
+        setHoldings([]);
+        setPortfolioHistory([]);
+        setFollowState(null);
+        setLoading(false);
+        setBusy(false);
+        return;
+      }
+
+      historyLeagueByName = new Map(
+        ((historyPlayersData ?? []) as { name: string; league: string }[]).map((row) => [
+          row.name,
+          row.league
+        ])
+      );
+    }
+
+    setPortfolioHistory(
+      parsedPortfolioHistory.map((point) => ({
+        ...point,
+        holdings: point.holdings.map((holding) => ({
+          ...holding,
+          player_league: normalizeLeagueLabel(
+            historyLeagueByName.get(holding.player_name) ?? holding.player_league
+          )
+        }))
       }))
     );
     const followStateRows = (followStateResult.data ?? []) as FollowStateRow[];
@@ -275,6 +363,11 @@ function PublicProfilePanel({
 
   const isCurrentUser = snapshot.result_user_id === viewerUserId;
   const isFollowing = followState?.result_is_following ?? false;
+  const topHoldingLeague = snapshot.result_top_holding_player_name
+    ? holdings.find(
+        (holding) => holding.result_player_name === snapshot.result_top_holding_player_name
+      )?.result_player_league ?? null
+    : null;
 
   const toggleFollow = async () => {
     if (isCurrentUser || !profileUserId) return;
@@ -299,22 +392,26 @@ function PublicProfilePanel({
   return (
     <div className="grid">
       <div className="card">
-        <h2>
-          {snapshot.result_username}
-          {isCurrentUser ? " (You)" : ""}
-        </h2>
-        {!isCurrentUser ? (
-          <>
-            <button type="button" onClick={toggleFollow} disabled={busy || followBusy}>
-              {followBusy
-                ? "Saving..."
-                : isFollowing
-                  ? "Unfollow"
-                  : "Follow"}
-            </button>
-            {followState?.result_follows_you ? <p>Follows you</p> : null}
-          </>
-        ) : null}
+        <div className="account-header">
+          <h2>
+            {snapshot.result_username}
+            {isCurrentUser ? " (You)" : ""}
+          </h2>
+          {!isCurrentUser ? (
+            <div className="public-follow-controls">
+              <button type="button" onClick={toggleFollow} disabled={busy || followBusy}>
+                {followBusy
+                  ? "Saving..."
+                  : isFollowing
+                    ? "Unfollow"
+                    : "Follow"}
+              </button>
+              {followState?.result_follows_you ? (
+                <p className="muted">Follows You</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
         <div className="profile-connection-grid">
           <button
             type="button"
@@ -360,7 +457,16 @@ function PublicProfilePanel({
         {holdings.length === 0 ? (
           <p className="muted">No FlagPlants Yet.</p>
         ) : (
-          <table>
+          <table className="public-profile-holdings-table">
+            <colgroup>
+              <col className="public-profile-holdings-col-player" />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
+              <col />
+            </colgroup>
             <thead>
               <tr>
                 <th>Player</th>
@@ -375,7 +481,21 @@ function PublicProfilePanel({
             <tbody>
               {holdings.map((holding) => (
                 <tr key={holding.result_player_id}>
-                  <td>{holding.result_player_name}</td>
+                  <td>
+                    <span className="dashboard-player-cell">
+                      <Link href={`/players/${holding.result_player_id}`}>
+                        <span className="dashboard-player-name">
+                          {holding.result_player_name}
+                        </span>
+                      </Link>
+                      <span
+                        className="league-badge"
+                        style={getLeagueBadgeStyle(holding.result_player_league)}
+                      >
+                        {holding.result_player_league}
+                      </span>
+                    </span>
+                  </td>
                   <td>{formatTwoDecimals(holding.result_units)}</td>
                   <td>{formatFlagAmount(holding.result_avg_cost_basis)}</td>
                   <td>{formatFlagAmount(holding.result_current_price)}</td>
@@ -441,7 +561,18 @@ function PublicProfilePanel({
           Top FlagPlant By Value:{" "}
           <strong>
             {snapshot.result_top_holding_player_name
-              ? `${snapshot.result_top_holding_player_name} (${formatFlagAmount(snapshot.result_top_holding_value)})`
+              ? (
+                <span className="player-cell-with-league">
+                  <span>{snapshot.result_top_holding_player_name}</span>
+                  <span
+                    className="league-badge"
+                    style={getLeagueBadgeStyle(normalizeLeagueLabel(topHoldingLeague))}
+                  >
+                    {normalizeLeagueLabel(topHoldingLeague)}
+                  </span>
+                  <span>({formatFlagAmount(snapshot.result_top_holding_value)})</span>
+                </span>
+              )
               : "--"}
           </strong>
         </p>

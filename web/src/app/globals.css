@@ -253,6 +253,43 @@ main > p > a:hover {
   margin-bottom: 0.8rem;
 }
 
+.admin-card-hidden {
+  display: none;
+}
+
+.league-filter-row {
+  margin-top: 0.68rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.league-filter-chip {
+  width: auto;
+  border-radius: 999px;
+  padding: 0.22rem 0.72rem;
+  letter-spacing: 0.03em;
+  box-shadow: none;
+}
+
+.league-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.1rem 0.48rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.player-cell-with-league {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+}
+
 .vote-item-card {
   display: flex;
   align-items: center;
@@ -541,7 +578,7 @@ code {
 
 .dashboard-columns {
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.8fr);
   gap: 0.8rem;
   align-items: start;
 }
@@ -562,6 +599,33 @@ code {
 
 .dashboard-holdings-table {
   min-width: 0;
+  table-layout: fixed;
+}
+
+.dashboard-holdings-table col.dashboard-holdings-col-player {
+  width: 28%;
+}
+
+.dashboard-player-cell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.24rem;
+}
+
+.dashboard-player-name {
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.public-profile-holdings-table {
+  min-width: 0;
+  table-layout: auto;
+}
+
+.public-profile-holdings-table col.public-profile-holdings-col-player {
+  width: 32%;
+  min-width: 240px;
 }
 
 .players-controls-row {
@@ -601,6 +665,17 @@ code {
 
 .account-actions button {
   width: auto;
+}
+
+.public-follow-controls {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.28rem;
+}
+
+.public-follow-controls p {
+  margin: 0;
 }
 
 .profile-connection-grid {

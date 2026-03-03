@@ -8,11 +8,17 @@ import { CardSkeleton, TableSkeleton } from "@/components/ui-skeletons";
 import { EmptyState, ErrorState, LoadingState } from "@/components/ui-states";
 import { formatEasternDateTime } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
+import {
+  getLeagueBadgeStyle,
+  getLeagueFilterStyle,
+  normalizeLeagueLabel
+} from "@/lib/leagues";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type PlayerRow = {
   id: string;
   name: string;
+  league: string;
   seed_price: number;
   current_price: number;
   holder_count: number;
@@ -40,10 +46,12 @@ type OrderRow = {
 type PlayerLookupRow = {
   id: string;
   name: string;
+  league: string;
 };
 
 type OrderViewRow = OrderRow & {
   player_name: string;
+  player_league: string;
 };
 
 type TabKey = "available_players" | "my_orders";
@@ -116,6 +124,8 @@ function FlagMarketPanel({ userId }: { userId: string }) {
 function PlayersTable() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [availableLeagues, setAvailableLeagues] = useState<string[]>([]);
+  const [selectedLeagues, setSelectedLeagues] = useState<string[] | null>(null);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -127,7 +137,8 @@ function PlayersTable() {
 
     const playersQuery = supabase
       .from("players")
-      .select("id,name,seed_price,current_price")
+      .select("id,name,league,seed_price,current_price")
+      .order("league", { ascending: true })
       .order("current_price", { ascending: false });
     const marketStatsQuery = supabase.rpc("get_player_market_stats");
 
@@ -146,21 +157,33 @@ function PlayersTable() {
       PlayerRow,
       "holder_count" | "invested_capital"
     >[];
+    const normalizedPlayersData = playersData.map((player) => ({
+      ...player,
+      league: normalizeLeagueLabel(player.league)
+    }));
     const marketStatsData = marketStatsResult.error
       ? []
       : ((marketStatsResult.data ?? []) as PlayerMarketStatsRow[]);
     const marketStatsByPlayerId = new Map(
       marketStatsData.map((row) => [row.result_player_id, row])
     );
+    const nextLeagues = [...new Set(normalizedPlayersData.map((player) => player.league))].sort(
+      (a, b) => a.localeCompare(b)
+    );
 
     setPlayers(
-      playersData.map((player) => ({
+      normalizedPlayersData.map((player) => ({
         ...player,
         holder_count: marketStatsByPlayerId.get(player.id)?.result_holder_count ?? 0,
         invested_capital:
           marketStatsByPlayerId.get(player.id)?.result_invested_capital ?? 0
       }))
     );
+    setAvailableLeagues(nextLeagues);
+    setSelectedLeagues((previous) => {
+      if (previous === null) return nextLeagues;
+      return previous.filter((league) => nextLeagues.includes(league));
+    });
     setLoading(false);
   }, [supabase]);
 
@@ -174,9 +197,27 @@ function PlayersTable() {
 
   const filteredPlayers = useMemo(() => {
     const normalized = searchQuery.trim().toLowerCase();
-    if (normalized.length === 0) return players;
-    return players.filter((player) => player.name.toLowerCase().includes(normalized));
-  }, [players, searchQuery]);
+    const activeLeagueFilter =
+      selectedLeagues === null ? availableLeagues : selectedLeagues;
+    const leagueSet = new Set(activeLeagueFilter);
+    const leagueFilteredPlayers = players.filter((player) => leagueSet.has(player.league));
+    if (normalized.length === 0) return leagueFilteredPlayers;
+    return leagueFilteredPlayers.filter((player) =>
+      player.name.toLowerCase().includes(normalized)
+    );
+  }, [players, searchQuery, selectedLeagues, availableLeagues]);
+
+  function toggleLeague(league: string) {
+    setSelectedLeagues((previous) => {
+      const current = previous ?? availableLeagues;
+      if (current.includes(league)) {
+        return current.filter((value) => value !== league);
+      }
+      const nextSet = new Set(current);
+      nextSet.add(league);
+      return availableLeagues.filter((value) => nextSet.has(value));
+    });
+  }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -208,17 +249,36 @@ function PlayersTable() {
           {loading ? "Loading..." : "Refresh"}
         </button>
       </div>
+      <div className="league-filter-row">
+        {availableLeagues.map((league) => {
+          const currentlySelected =
+            (selectedLeagues ?? availableLeagues).includes(league);
+          return (
+            <button
+              key={league}
+              type="button"
+              className="league-filter-chip"
+              style={getLeagueFilterStyle(league, currentlySelected)}
+              onClick={() => toggleLeague(league)}
+            >
+              {league}
+            </button>
+          );
+        })}
+      </div>
       {error ? <ErrorState message={error} /> : null}
-      {loading ? <TableSkeleton columns={5} rows={8} /> : null}
+      {loading ? <TableSkeleton columns={6} rows={8} /> : null}
 
       {!loading && !error ? (
         <>
           {filteredPlayers.length === 0 ? (
             <EmptyState
               message={
-                searchQuery
-                  ? `No Players Match "${searchQuery}".`
-                  : "No Players Available."
+                selectedLeagues !== null && selectedLeagues.length === 0
+                  ? "No Leagues Selected."
+                  : searchQuery
+                    ? `No Players Match "${searchQuery}".`
+                    : "No Players Available."
               }
             />
           ) : (
@@ -227,6 +287,7 @@ function PlayersTable() {
                 <thead>
                   <tr>
                     <th>Name</th>
+                    <th>League</th>
                     <th>Seed Price</th>
                     <th>Current Price</th>
                     <th>Holders</th>
@@ -238,6 +299,14 @@ function PlayersTable() {
                     <tr key={player.id}>
                       <td>
                         <Link href={`/players/${player.id}`}>{player.name}</Link>
+                      </td>
+                      <td>
+                        <span
+                          className="league-badge"
+                          style={getLeagueBadgeStyle(player.league)}
+                        >
+                          {player.league}
+                        </span>
                       </td>
                       <td>{formatFlagAmount(player.seed_price)}</td>
                       <td>{formatFlagAmount(player.current_price)}</td>
@@ -275,12 +344,12 @@ function OrdersPanel({ userId }: { userId: string }) {
   const enrichOrdersWithPlayerNames = useCallback(
     async (rawOrders: OrderRow[]) => {
       const playerIds = [...new Set(rawOrders.map((row) => row.player_id))];
-      let playerMap = new Map<string, string>();
+      let playerMap = new Map<string, { name: string; league: string }>();
 
       if (playerIds.length > 0) {
         const { data: playerData, error: playerError } = await supabase
           .from("players")
-          .select("id,name")
+          .select("id,name,league")
           .in("id", playerIds);
 
         if (playerError) {
@@ -288,13 +357,20 @@ function OrdersPanel({ userId }: { userId: string }) {
         }
 
         playerMap = new Map(
-          ((playerData ?? []) as PlayerLookupRow[]).map((row) => [row.id, row.name])
+          ((playerData ?? []) as PlayerLookupRow[]).map((row) => [
+            row.id,
+            {
+              name: row.name,
+              league: row.league
+            }
+          ])
         );
       }
 
       return rawOrders.map((row) => ({
         ...row,
-        player_name: playerMap.get(row.player_id) ?? row.player_id
+        player_name: playerMap.get(row.player_id)?.name ?? row.player_id,
+        player_league: normalizeLeagueLabel(playerMap.get(row.player_id)?.league)
       }));
     },
     [supabase]
@@ -483,7 +559,15 @@ function OrdersPanel({ userId }: { userId: string }) {
                 <tr key={order.id}>
                   <td>{formatTradeDateMMMDD(order.trade_date)}</td>
                   <td>
-                    <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
+                    <span className="player-cell-with-league">
+                      <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
+                      <span
+                        className="league-badge"
+                        style={getLeagueBadgeStyle(order.player_league)}
+                      >
+                        {order.player_league}
+                      </span>
+                    </span>
                   </td>
                   <td>{order.order_type}</td>
                   <td>{order.status}</td>
@@ -577,7 +661,15 @@ function OrdersPanel({ userId }: { userId: string }) {
                     <tr key={order.id}>
                       <td>{formatTradeDateMMMDD(order.trade_date)}</td>
                       <td>
-                        <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
+                        <span className="player-cell-with-league">
+                          <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
+                          <span
+                            className="league-badge"
+                            style={getLeagueBadgeStyle(order.player_league)}
+                          >
+                            {order.player_league}
+                          </span>
+                        </span>
                       </td>
                       <td>{order.order_type}</td>
                       <td>{order.status}</td>
@@ -624,3 +716,4 @@ function OrdersPanel({ userId }: { userId: string }) {
     </div>
   );
 }
+

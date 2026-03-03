@@ -139,6 +139,7 @@ Also run `supabase/patch_follows.sql` once to add follow/unfollow social graph R
 Also run `supabase/patch_follow_list_pagination.sql` once to add follower/following list search + pagination RPCs.
 Also run `supabase/patch_daily_close.sql` once to add one-click admin daily-close pipeline RPC.
 Also run `supabase/patch_manual_price_override.sql` once to add admin manual player price override RPC.
+Also run `supabase/patch_player_leagues_and_admin_create.sql` once to add player league metadata and an admin RPC for creating new players in-market.
 Also run `supabase/patch_admin_diagnostics.sql` once to add admin diagnostics RPCs for daily-close health, job logs, and recent order-execution activity.
 Also run `supabase/patch_daily_cadence_automation.sql` once to enable automated midnight ET daily cadence (close D, publish winners for D, assign D opinions for D+1 voting).
 
@@ -165,8 +166,9 @@ Run in Supabase SQL Editor in this order:
 17. `supabase/patch_follow_list_pagination.sql`
 18. `supabase/patch_daily_close.sql`
 19. `supabase/patch_manual_price_override.sql`
-20. `supabase/patch_admin_diagnostics.sql`
-21. `supabase/patch_daily_cadence_automation.sql`
+20. `supabase/patch_player_leagues_and_admin_create.sql`
+21. `supabase/patch_admin_diagnostics.sql`
+22. `supabase/patch_daily_cadence_automation.sql`
 
 ### SQL Smoke Tests
 
