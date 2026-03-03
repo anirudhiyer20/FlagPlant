@@ -69,12 +69,6 @@ type FollowStateRow = {
   result_following_count: number;
 };
 
-type FollowListRow = {
-  result_user_id: string;
-  result_username: string;
-  result_followed_at: string;
-};
-
 type DashboardData = {
   profile: ProfileRow | null;
   wallet: WalletRow | null;
@@ -85,8 +79,6 @@ type DashboardData = {
   holdings: HoldingViewRow[];
   portfolioHistory: PortfolioHistoryPoint[];
   followState: FollowStateRow | null;
-  followers: FollowListRow[];
-  following: FollowListRow[];
 };
 
 type PortfolioHistoryRawRow = {
@@ -154,13 +146,8 @@ function DashboardPanel({ userId }: { userId: string }) {
     latestWinner: null,
     holdings: [],
     portfolioHistory: [],
-    followState: null,
-    followers: [],
-    following: []
+    followState: null
   });
-  const [activeConnectionList, setActiveConnectionList] = useState<
-    "followers" | "following" | "none"
-  >("none");
   const dashboardDate = useMemo(() => getEasternDateString(), []);
 
   const loadDashboard = useCallback(async () => {
@@ -212,16 +199,6 @@ function DashboardPanel({ userId }: { userId: string }) {
     const followStateQuery = supabase.rpc("get_follow_state", {
       target_user_id: userId
     });
-    const followersQuery = supabase.rpc("get_follow_list", {
-      target_user_id: userId,
-      list_kind: "followers",
-      limit_count: 20
-    });
-    const followingQuery = supabase.rpc("get_follow_list", {
-      target_user_id: userId,
-      list_kind: "following",
-      limit_count: 20
-    });
 
     const [
       profileResult,
@@ -232,9 +209,7 @@ function DashboardPanel({ userId }: { userId: string }) {
       latestWinnerResult,
       holdingsResult,
       portfolioHistoryResult,
-      followStateResult,
-      followersResult,
-      followingResult
+      followStateResult
     ] = await Promise.all([
       profileQuery,
       walletQuery,
@@ -244,9 +219,7 @@ function DashboardPanel({ userId }: { userId: string }) {
       latestWinnerQuery,
       holdingsQuery,
       portfolioHistoryQuery,
-      followStateQuery,
-      followersQuery,
-      followingQuery
+      followStateQuery
     ]);
 
     if (profileResult.error) {
@@ -303,19 +276,6 @@ function DashboardPanel({ userId }: { userId: string }) {
       setLoading(false);
       return;
     }
-    if (followersResult.error) {
-      setError(followersResult.error.message);
-      setBusy(false);
-      setLoading(false);
-      return;
-    }
-    if (followingResult.error) {
-      setError(followingResult.error.message);
-      setBusy(false);
-      setLoading(false);
-      return;
-    }
-
     const holdingsRaw = (holdingsResult.data ?? []) as HoldingRawRow[];
     const playerIds = holdingsRaw.map((row) => row.player_id);
     let playerMap = new Map<string, PlayerLookupRow>();
@@ -365,8 +325,6 @@ function DashboardPanel({ userId }: { userId: string }) {
     }));
     const followStateRows = (followStateResult.data ?? []) as FollowStateRow[];
     const followState = followStateRows[0] ?? null;
-    const followers = (followersResult.data ?? []) as FollowListRow[];
-    const following = (followingResult.data ?? []) as FollowListRow[];
 
     const latestWinnerRaw = (latestWinnerResult.data as Omit<
       WinnerRow,
@@ -405,9 +363,7 @@ function DashboardPanel({ userId }: { userId: string }) {
       latestWinner,
       holdings,
       portfolioHistory,
-      followState,
-      followers,
-      following
+      followState
     });
 
     setBusy(false);
@@ -456,13 +412,6 @@ function DashboardPanel({ userId }: { userId: string }) {
     },
     null
   );
-  const activeConnectionRows =
-    activeConnectionList === "followers"
-      ? data.followers
-      : activeConnectionList === "following"
-        ? data.following
-        : [];
-
   return (
     <div className="grid">
       {loading ? (
@@ -508,14 +457,8 @@ function DashboardPanel({ userId }: { userId: string }) {
             <div className="profile-connection-grid">
               <button
                 type="button"
-                className={`profile-connection-button ${
-                  activeConnectionList === "followers" ? "active" : ""
-                }`}
-                onClick={() =>
-                  setActiveConnectionList((current) =>
-                    current === "followers" ? "none" : "followers"
-                  )
-                }
+                className="profile-connection-button"
+                onClick={() => router.push("/connections?tab=followers")}
               >
                 <span className="profile-connection-count">
                   {data.followState?.result_follower_count ?? 0}
@@ -528,14 +471,8 @@ function DashboardPanel({ userId }: { userId: string }) {
               </button>
               <button
                 type="button"
-                className={`profile-connection-button ${
-                  activeConnectionList === "following" ? "active" : ""
-                }`}
-                onClick={() =>
-                  setActiveConnectionList((current) =>
-                    current === "following" ? "none" : "following"
-                  )
-                }
+                className="profile-connection-button"
+                onClick={() => router.push("/connections?tab=following")}
               >
                 <span className="profile-connection-count">
                   {data.followState?.result_following_count ?? 0}
@@ -543,23 +480,6 @@ function DashboardPanel({ userId }: { userId: string }) {
                 <span className="profile-connection-label">Following</span>
               </button>
             </div>
-            {activeConnectionList !== "none" ? (
-              <>
-                {activeConnectionRows.length === 0 ? (
-                  <EmptyState message="No users in this list yet." />
-                ) : (
-                  <ul>
-                    {activeConnectionRows.map((row) => (
-                      <li key={`${activeConnectionList}-${row.result_user_id}`}>
-                        <Link href={`/profiles/${row.result_user_id}`}>
-                          {row.result_username}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            ) : null}
           </div>
 
           <div className="dashboard-columns">
@@ -602,8 +522,7 @@ function DashboardPanel({ userId }: { userId: string }) {
                     <p>
                       Reward Flags: {formatFlagAmount(data.latestWinner.reward_flags)}
                     </p>
-                    <p>Winning Opinion:</p>
-                    <p>{data.latestWinner.opinion_body ?? "--"}</p>
+                    <p>Winning Opinion: {data.latestWinner.opinion_body ?? "--"}</p>
                   </>
                 ) : (
                   <EmptyState message="No Winner Result Yet For This Account." />

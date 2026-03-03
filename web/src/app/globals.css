@@ -640,6 +640,120 @@ code {
   color: #072139;
 }
 
+.connections-toolbar {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.connections-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.connections-search-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55rem;
+}
+
+.connections-search-input {
+  display: grid;
+  gap: 0.35rem;
+  flex: 1 1 260px;
+}
+
+.connections-search-row button {
+  width: auto;
+}
+
+.connections-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.55rem;
+}
+
+.connections-filter-select {
+  display: grid;
+  gap: 0.35rem;
+  flex: 1 1 220px;
+}
+
+.connections-filter-row button {
+  width: auto;
+}
+
+.connections-pagination {
+  margin-top: 0.8rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.connections-page-indicator {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.connections-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.connections-table col.connections-col-user {
+  width: 42%;
+}
+
+.connections-table col.connections-col-networth {
+  width: 24%;
+}
+
+.connections-table col.connections-col-date {
+  width: 16%;
+}
+
+.connections-table col.connections-col-action {
+  width: 18%;
+}
+
+.connections-table th.connections-col-action,
+.connections-table td.connections-col-action {
+  text-align: right;
+}
+
+.connections-table td.connections-col-action button {
+  width: auto;
+}
+
+.connections-user-cell {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.connections-user-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(132, 255, 219, 0.44);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #c6fff2;
+  background: rgba(9, 46, 36, 0.45);
+}
+
+.connections-list-meta {
+  margin-bottom: 0.65rem;
+}
+
 .order-card-header {
   display: flex;
   align-items: flex-start;
@@ -819,6 +933,20 @@ code {
 
   .profile-connection-button {
     min-height: 78px;
+  }
+
+  .connections-summary {
+    flex-direction: column;
+  }
+
+  .connections-search-row button {
+    flex: 1 1 calc(50% - 0.55rem);
+    width: auto;
+  }
+
+  .connections-filter-row button {
+    flex: 1 1 100%;
+    width: auto;
   }
 }
 

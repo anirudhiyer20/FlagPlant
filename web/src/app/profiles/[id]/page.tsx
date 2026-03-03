@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
@@ -57,12 +56,6 @@ type FollowStateRow = {
   result_follows_you: boolean;
   result_follower_count: number;
   result_following_count: number;
-};
-
-type FollowListRow = {
-  result_user_id: string;
-  result_username: string;
-  result_followed_at: string;
 };
 
 function formatSignedFlag(value: number): string {
@@ -137,18 +130,14 @@ function PublicProfilePanel({
   profileUserId: string;
 }) {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
+  const router = useRouter();
   const [snapshot, setSnapshot] = useState<PublicProfileSnapshotRow | null>(null);
   const [holdings, setHoldings] = useState<PublicProfileHoldingRow[]>([]);
   const [portfolioHistory, setPortfolioHistory] = useState<PortfolioHistoryPoint[]>([]);
   const [followState, setFollowState] = useState<FollowStateRow | null>(null);
-  const [followers, setFollowers] = useState<FollowListRow[]>([]);
-  const [following, setFollowing] = useState<FollowListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
-  const [activeConnectionList, setActiveConnectionList] = useState<
-    "followers" | "following" | "none"
-  >("none");
   const [error, setError] = useState("");
 
   const loadProfile = useCallback(async () => {
@@ -174,31 +163,17 @@ function PublicProfilePanel({
     const followStateQuery = supabase.rpc("get_follow_state", {
       target_user_id: profileUserId
     });
-    const followersQuery = supabase.rpc("get_follow_list", {
-      target_user_id: profileUserId,
-      list_kind: "followers",
-      limit_count: 8
-    });
-    const followingQuery = supabase.rpc("get_follow_list", {
-      target_user_id: profileUserId,
-      list_kind: "following",
-      limit_count: 8
-    });
 
     const [
       snapshotResult,
       holdingsResult,
       portfolioHistoryResult,
-      followStateResult,
-      followersResult,
-      followingResult
+      followStateResult
     ] = await Promise.all([
       snapshotQuery,
       holdingsQuery,
       portfolioHistoryQuery,
-      followStateQuery,
-      followersQuery,
-      followingQuery
+      followStateQuery
     ]);
 
     if (snapshotResult.error) {
@@ -207,8 +182,6 @@ function PublicProfilePanel({
       setHoldings([]);
       setPortfolioHistory([]);
       setFollowState(null);
-      setFollowers([]);
-      setFollowing([]);
       setLoading(false);
       setBusy(false);
       return;
@@ -219,8 +192,6 @@ function PublicProfilePanel({
       setHoldings([]);
       setPortfolioHistory([]);
       setFollowState(null);
-      setFollowers([]);
-      setFollowing([]);
       setLoading(false);
       setBusy(false);
       return;
@@ -231,8 +202,6 @@ function PublicProfilePanel({
       setHoldings([]);
       setPortfolioHistory([]);
       setFollowState(null);
-      setFollowers([]);
-      setFollowing([]);
       setLoading(false);
       setBusy(false);
       return;
@@ -243,32 +212,6 @@ function PublicProfilePanel({
       setHoldings([]);
       setPortfolioHistory([]);
       setFollowState(null);
-      setFollowers([]);
-      setFollowing([]);
-      setLoading(false);
-      setBusy(false);
-      return;
-    }
-    if (followersResult.error) {
-      setError(followersResult.error.message);
-      setSnapshot(null);
-      setHoldings([]);
-      setPortfolioHistory([]);
-      setFollowState(null);
-      setFollowers([]);
-      setFollowing([]);
-      setLoading(false);
-      setBusy(false);
-      return;
-    }
-    if (followingResult.error) {
-      setError(followingResult.error.message);
-      setSnapshot(null);
-      setHoldings([]);
-      setPortfolioHistory([]);
-      setFollowState(null);
-      setFollowers([]);
-      setFollowing([]);
       setLoading(false);
       setBusy(false);
       return;
@@ -289,14 +232,11 @@ function PublicProfilePanel({
     );
     const followStateRows = (followStateResult.data ?? []) as FollowStateRow[];
     setFollowState(followStateRows[0] ?? null);
-    setFollowers((followersResult.data ?? []) as FollowListRow[]);
-    setFollowing((followingResult.data ?? []) as FollowListRow[]);
     setLoading(false);
     setBusy(false);
   }, [profileUserId, supabase]);
 
   useEffect(() => {
-    setActiveConnectionList("none");
     loadProfile().catch((loadError: unknown) => {
       const msg = loadError instanceof Error ? loadError.message : "Unknown load error";
       setError(msg);
@@ -304,8 +244,6 @@ function PublicProfilePanel({
       setHoldings([]);
       setPortfolioHistory([]);
       setFollowState(null);
-      setFollowers([]);
-      setFollowing([]);
       setLoading(false);
       setBusy(false);
     });
@@ -337,12 +275,6 @@ function PublicProfilePanel({
 
   const isCurrentUser = snapshot.result_user_id === viewerUserId;
   const isFollowing = followState?.result_is_following ?? false;
-  const activeConnectionRows =
-    activeConnectionList === "followers"
-      ? followers
-      : activeConnectionList === "following"
-        ? following
-        : [];
 
   const toggleFollow = async () => {
     if (isCurrentUser || !profileUserId) return;
@@ -383,96 +315,50 @@ function PublicProfilePanel({
             {followState?.result_follows_you ? <p>Follows you</p> : null}
           </>
         ) : null}
-        <p>
-          Followers:{" "}
+        <div className="profile-connection-grid">
           <button
             type="button"
-            onClick={() =>
-              setActiveConnectionList((current) =>
-                current === "followers" ? "none" : "followers"
-              )
-            }
+            className="profile-connection-button"
+            onClick={() => router.push(`/connections?tab=followers&user=${profileUserId}`)}
           >
-            {followState?.result_follower_count ?? 0}
+            <span className="profile-connection-count">
+              {followState?.result_follower_count ?? 0}
+            </span>
+            <span className="profile-connection-label">
+              {(followState?.result_follower_count ?? 0) === 1 ? "Follower" : "Followers"}
+            </span>
           </button>
-        </p>
-        <p>
-          Following:{" "}
           <button
             type="button"
-            onClick={() =>
-              setActiveConnectionList((current) =>
-                current === "following" ? "none" : "following"
-              )
-            }
+            className="profile-connection-button"
+            onClick={() => router.push(`/connections?tab=following&user=${profileUserId}`)}
           >
-            {followState?.result_following_count ?? 0}
+            <span className="profile-connection-count">
+              {followState?.result_following_count ?? 0}
+            </span>
+            <span className="profile-connection-label">Following</span>
           </button>
-        </p>
-        <button type="button" onClick={loadProfile} disabled={busy}>
-          {busy ? "Refreshing..." : "Refresh profile"}
-        </button>
+        </div>
       </div>
 
       <div className="card">
         <h2>Wallet</h2>
         <p>
-          Unplanted flags: <strong>{formatFlagAmount(snapshot.result_liquid_flags)}</strong>
+          Unplanted Flags: <strong>{formatFlagAmount(snapshot.result_liquid_flags)}</strong>
         </p>
         <p>
-          FlagPlants value:{" "}
+          FlagPlants Value:{" "}
           <strong>{formatFlagAmount(snapshot.result_holdings_value)}</strong>
         </p>
         <p>
-          Total net worth: <strong>{formatFlagAmount(snapshot.result_net_worth)}</strong>
+          Total Net Worth: <strong>{formatFlagAmount(snapshot.result_net_worth)}</strong>
         </p>
-      </div>
-
-      <div className="card">
-        <h2>Portfolio Metrics</h2>
-        <p>
-          FlagPlants cost basis:{" "}
-          <strong>{formatFlagAmount(snapshot.result_holdings_cost_basis)}</strong>
-        </p>
-        <p>
-          Unrealized P/L:{" "}
-          <strong>{formatSignedFlag(snapshot.result_unrealized_pnl)}</strong>
-        </p>
-        <p>
-          Unrealized return:{" "}
-          <strong>
-            {snapshot.result_unrealized_return_pct === null
-              ? "--"
-              : `${formatTwoDecimals(snapshot.result_unrealized_return_pct)}%`}
-          </strong>
-        </p>
-        <p>
-          Allocation (Unplanted / Planted):{" "}
-          <strong>
-            {snapshot.result_liquid_share_pct === null ||
-            snapshot.result_invested_share_pct === null
-              ? "--"
-              : `${formatTwoDecimals(snapshot.result_liquid_share_pct)}% / ${formatTwoDecimals(snapshot.result_invested_share_pct)}%`}
-          </strong>
-        </p>
-        <p>
-          FlagPlants count: <strong>{snapshot.result_holding_count}</strong>
-        </p>
-        <p>
-          Top FlagPlant by value:{" "}
-          <strong>
-            {snapshot.result_top_holding_player_name
-              ? `${snapshot.result_top_holding_player_name} (${formatFlagAmount(snapshot.result_top_holding_value)})`
-              : "--"}
-          </strong>
-        </p>
-        <PortfolioHistoryChart points={portfolioHistory} />
       </div>
 
       <div className="card">
         <h2>FlagPlants</h2>
         {holdings.length === 0 ? (
-          <p className="muted">No FlagPlants.</p>
+          <p className="muted">No FlagPlants Yet.</p>
         ) : (
           <table>
             <thead>
@@ -504,34 +390,6 @@ function PublicProfilePanel({
       </div>
 
       <div className="card">
-        <h2>Connections</h2>
-        {activeConnectionList === "none" ? (
-          <p className="muted">
-            Click follower/following count above to view the list.
-          </p>
-        ) : (
-          <>
-            <p>
-              <strong>
-                {activeConnectionList === "followers" ? "Followers" : "Following"}
-              </strong>
-            </p>
-            {activeConnectionRows.length === 0 ? (
-              <p className="muted">No users in this list yet.</p>
-            ) : (
-              <ul>
-                {activeConnectionRows.map((row) => (
-                  <li key={`${activeConnectionList}-${row.result_user_id}`}>
-                    <Link href={`/profiles/${row.result_user_id}`}>{row.result_username}</Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
-        )}
-      </div>
-
-      <div className="card">
         <h2>Latest Winner Result</h2>
         {snapshot.result_latest_winner_date ? (
           <>
@@ -539,15 +397,55 @@ function PublicProfilePanel({
             <p>Rank: {snapshot.result_latest_winner_rank}</p>
             <p>Votes: {snapshot.result_latest_winner_votes}</p>
             <p>
-              Reward flags:{" "}
+              Reward Flags:{" "}
               {formatFlagAmount(snapshot.result_latest_winner_reward_flags)}
             </p>
-            <p>Winning opinion:</p>
-            <p>{snapshot.result_latest_winner_opinion ?? "--"}</p>
+            <p>Winning Opinion: {snapshot.result_latest_winner_opinion ?? "--"}</p>
           </>
         ) : (
-          <p className="muted">No winner result yet for this account.</p>
+          <p className="muted">No Winner Result Yet For This Account.</p>
         )}
+      </div>
+
+      <div className="card">
+        <h2>Portfolio Metrics</h2>
+        <p>
+          FlagPlants Cost Basis:{" "}
+          <strong>{formatFlagAmount(snapshot.result_holdings_cost_basis)}</strong>
+        </p>
+        <p>
+          Unrealized P/L:{" "}
+          <strong>{formatSignedFlag(snapshot.result_unrealized_pnl)}</strong>
+        </p>
+        <p>
+          Unrealized Return:{" "}
+          <strong>
+            {snapshot.result_unrealized_return_pct === null
+              ? "--"
+              : `${formatTwoDecimals(snapshot.result_unrealized_return_pct)}%`}
+          </strong>
+        </p>
+        <p>
+          Allocation (Unplanted / Planted):{" "}
+          <strong>
+            {snapshot.result_liquid_share_pct === null ||
+            snapshot.result_invested_share_pct === null
+              ? "--"
+              : `${formatTwoDecimals(snapshot.result_liquid_share_pct)}% / ${formatTwoDecimals(snapshot.result_invested_share_pct)}%`}
+          </strong>
+        </p>
+        <p>
+          FlagPlants Count: <strong>{snapshot.result_holding_count}</strong>
+        </p>
+        <p>
+          Top FlagPlant By Value:{" "}
+          <strong>
+            {snapshot.result_top_holding_player_name
+              ? `${snapshot.result_top_holding_player_name} (${formatFlagAmount(snapshot.result_top_holding_value)})`
+              : "--"}
+          </strong>
+        </p>
+        <PortfolioHistoryChart points={portfolioHistory} />
       </div>
     </div>
   );
