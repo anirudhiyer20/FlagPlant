@@ -50,3 +50,12 @@ with check (
       and oa.assigned_for_date = opinion_votes.assigned_for_date
   )
 );
+
+drop policy if exists votes_delete_own on public.opinion_votes;
+create policy votes_delete_own
+on public.opinion_votes
+for delete
+using (
+  auth.uid() = voter_user_id
+  and assigned_for_date = public.app_current_date_est()
+);

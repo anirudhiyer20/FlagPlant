@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Space_Mono } from "next/font/google";
+import { JetBrains_Mono, Sora } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import "./globals.css";
 
-const sans = Space_Grotesk({
+const sans = Sora({
   subsets: ["latin"],
   variable: "--font-sans",
-  weight: ["400", "500", "600", "700"]
+  weight: ["400", "500", "600", "700", "800"]
 });
 
-const mono = Space_Mono({
+const mono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
   weight: ["400", "700"]

@@ -491,9 +491,6 @@ function DashboardPanel({ userId }: { userId: string }) {
             <div className="account-header">
               <h2>{data.profile?.username ?? "User Profile"}</h2>
               <div className="account-actions">
-                <button type="button" onClick={() => router.push(`/profiles/${userId}`)}>
-                  Public Profile
-                </button>
                 {data.profile?.role === "admin" ? (
                   <button
                     type="button"
@@ -503,43 +500,51 @@ function DashboardPanel({ userId }: { userId: string }) {
                     Admin Mode
                   </button>
                 ) : null}
+                <button type="button" onClick={() => router.push(`/profiles/${userId}`)}>
+                  Public Profile
+                </button>
               </div>
             </div>
-            <div className="split-metrics">
-              <div>
-                <p className="muted">Followers</p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveConnectionList((current) =>
-                      current === "followers" ? "none" : "followers"
-                    )
-                  }
-                >
+            <div className="profile-connection-grid">
+              <button
+                type="button"
+                className={`profile-connection-button ${
+                  activeConnectionList === "followers" ? "active" : ""
+                }`}
+                onClick={() =>
+                  setActiveConnectionList((current) =>
+                    current === "followers" ? "none" : "followers"
+                  )
+                }
+              >
+                <span className="profile-connection-count">
                   {data.followState?.result_follower_count ?? 0}
-                </button>
-              </div>
-              <div>
-                <p className="muted">Following</p>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setActiveConnectionList((current) =>
-                      current === "following" ? "none" : "following"
-                    )
-                  }
-                >
+                </span>
+                <span className="profile-connection-label">
+                  {(data.followState?.result_follower_count ?? 0) === 1
+                    ? "Follower"
+                    : "Followers"}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`profile-connection-button ${
+                  activeConnectionList === "following" ? "active" : ""
+                }`}
+                onClick={() =>
+                  setActiveConnectionList((current) =>
+                    current === "following" ? "none" : "following"
+                  )
+                }
+              >
+                <span className="profile-connection-count">
                   {data.followState?.result_following_count ?? 0}
-                </button>
-              </div>
+                </span>
+                <span className="profile-connection-label">Following</span>
+              </button>
             </div>
             {activeConnectionList !== "none" ? (
               <>
-                <p>
-                  <strong>
-                    {activeConnectionList === "followers" ? "Followers" : "Following"}
-                  </strong>
-                </p>
                 {activeConnectionRows.length === 0 ? (
                   <EmptyState message="No users in this list yet." />
                 ) : (
@@ -578,7 +583,7 @@ function DashboardPanel({ userId }: { userId: string }) {
               <div className="card">
                 <h2>Voting Status</h2>
                 <p>Assignments: {data.assignmentsCount}</p>
-                <p>Votes cast: {data.votesCount}</p>
+                <p>Votes Cast: {data.votesCount}</p>
                 <p>
                   Completion:{" "}
                   {data.assignmentsCount > 0
@@ -595,13 +600,13 @@ function DashboardPanel({ userId }: { userId: string }) {
                     <p>Rank: {data.latestWinner.rank}</p>
                     <p>Votes: {data.latestWinner.votes_received}</p>
                     <p>
-                      Reward flags: {formatFlagAmount(data.latestWinner.reward_flags)}
+                      Reward Flags: {formatFlagAmount(data.latestWinner.reward_flags)}
                     </p>
-                    <p>Winning opinion:</p>
+                    <p>Winning Opinion:</p>
                     <p>{data.latestWinner.opinion_body ?? "--"}</p>
                   </>
                 ) : (
-                  <EmptyState message="No winner result yet for this account." />
+                  <EmptyState message="No Winner Result Yet For This Account." />
                 )}
               </div>
             </div>
@@ -614,15 +619,15 @@ function DashboardPanel({ userId }: { userId: string }) {
               <div className="card">
                 <h2>Wallet</h2>
                 <p>
-                  Unplanted flags:{" "}
+                  Unplanted Flags:{" "}
                   <strong>{formatFlagAmount(data.wallet?.liquid_flags)}</strong>
                 </p>
                 <p>
-                  FlagPlants value:{" "}
+                  FlagPlants Value:{" "}
                   <strong>{formatFlagAmount(totalHoldingsMarketValue)}</strong>
                 </p>
                 <p>
-                  Total net worth: <strong>{formatFlagAmount(totalNetWorth)}</strong>
+                  Total Net Worth: <strong>{formatFlagAmount(totalNetWorth)}</strong>
                 </p>
               </div>
 
@@ -667,7 +672,7 @@ function DashboardPanel({ userId }: { userId: string }) {
               <div className="card">
                 <h2>Portfolio Metrics</h2>
                 <p>
-                  FlagPlants cost basis:{" "}
+                  FlagPlants Cost Basis:{" "}
                   <strong>{formatFlagAmount(totalHoldingsCostBasis)}</strong>
                 </p>
                 <p>
@@ -675,7 +680,7 @@ function DashboardPanel({ userId }: { userId: string }) {
                   <strong>{formatSignedFlag(totalUnrealizedPnl)}</strong>
                 </p>
                 <p>
-                  Unrealized return:{" "}
+                  Unrealized Return:{" "}
                   <strong>
                     {totalUnrealizedPnlPct === null
                       ? "--"
@@ -691,7 +696,7 @@ function DashboardPanel({ userId }: { userId: string }) {
                   </strong>
                 </p>
                 <p>
-                  Top FlagPlant by value:{" "}
+                  Top FlagPlant By Value:{" "}
                   <strong>
                     {topHolding
                       ? `${topHolding.player_name} (${formatFlagAmount(topHolding.market_value)})`

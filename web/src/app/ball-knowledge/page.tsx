@@ -206,10 +206,31 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
     setBusyOpinion(false);
   }
 
-  async function castVote(item: VoteItem) {
+  async function toggleVote(item: VoteItem) {
     setBusyVoteOpinionId(item.opinionId);
     setVoteError("");
     setVoteMessage("");
+
+    const alreadyVoted = votedOpinionIds.includes(item.opinionId);
+
+    if (alreadyVoted) {
+      const { error } = await supabase
+        .from("opinion_votes")
+        .delete()
+        .eq("opinion_id", item.opinionId)
+        .eq("voter_user_id", userId)
+        .eq("assigned_for_date", item.assignedForDate);
+
+      if (error) {
+        setVoteError(error.message);
+        setBusyVoteOpinionId(null);
+        return;
+      }
+
+      setVotedOpinionIds((prev) => prev.filter((id) => id !== item.opinionId));
+      setBusyVoteOpinionId(null);
+      return;
+    }
 
     const { error } = await supabase.from("opinion_votes").insert({
       opinion_id: item.opinionId,
@@ -223,10 +244,7 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
       return;
     }
 
-    setVotedOpinionIds((prev) =>
-      prev.includes(item.opinionId) ? prev : [...prev, item.opinionId]
-    );
-    setVoteMessage("Vote recorded.");
+    setVotedOpinionIds((prev) => (prev.includes(item.opinionId) ? prev : [...prev, item.opinionId]));
     setBusyVoteOpinionId(null);
   }
 
@@ -295,9 +313,8 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
       {activeTab === "vote" ? (
         <div className="card">
         <h2>Vote</h2>
-        <p className="muted">You vote on yesterday&apos;s submitted opinions.</p>
         <p className="muted">
-          Votes cast: {votedOpinionIds.length}/{items.length}
+          Votes Cast: {votedOpinionIds.length}/{items.length}
         </p>
 
         {loadingVote ? (
@@ -318,19 +335,21 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
             {items.map((item) => {
               const voted = votedOpinionIds.includes(item.opinionId);
               return (
-                <div className="card" key={item.assignmentId}>
-                  <p>{item.body}</p>
-                  <button
-                    disabled={voted || busyVoteOpinionId === item.opinionId}
-                    onClick={() => castVote(item)}
-                    type="button"
-                  >
-                    {voted
-                      ? "Voted"
-                      : busyVoteOpinionId === item.opinionId
-                        ? "Submitting..."
-                        : "Vote"}
-                  </button>
+                <div className="card vote-item-card" key={item.assignmentId}>
+                  <p className="vote-item-text">{item.body}</p>
+                  <div className="vote-item-actions">
+                    <button
+                      className={`vote-toggle-button ${
+                        voted ? "vote-toggle-button-voted" : "vote-toggle-button-vote"
+                      }`}
+                      disabled={busyVoteOpinionId === item.opinionId}
+                      onClick={() => toggleVote(item)}
+                      type="button"
+                      aria-pressed={voted}
+                    >
+                      {busyVoteOpinionId === item.opinionId ? "Saving..." : voted ? "Voted" : "Vote"}
+                    </button>
+                  </div>
                 </div>
               );
             })}

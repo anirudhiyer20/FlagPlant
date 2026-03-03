@@ -139,6 +139,7 @@ Also run `supabase/patch_follows.sql` once to add follow/unfollow social graph R
 Also run `supabase/patch_daily_close.sql` once to add one-click admin daily-close pipeline RPC.
 Also run `supabase/patch_manual_price_override.sql` once to add admin manual player price override RPC.
 Also run `supabase/patch_admin_diagnostics.sql` once to add admin diagnostics RPCs for daily-close health, job logs, and recent order-execution activity.
+Also run `supabase/patch_daily_cadence_automation.sql` once to enable automated midnight ET daily cadence (close D, publish winners for D, assign D opinions for D+1 voting).
 
 ### Existing Project Patch Order (Recommended)
 
@@ -163,12 +164,14 @@ Run in Supabase SQL Editor in this order:
 17. `supabase/patch_daily_close.sql`
 18. `supabase/patch_manual_price_override.sql`
 19. `supabase/patch_admin_diagnostics.sql`
+20. `supabase/patch_daily_cadence_automation.sql`
 
 ### SQL Smoke Tests
 
 - `supabase/smoke_01_daily_close_admin.sql`: validates admin context + daily close.
 - `supabase/smoke_02_vote_cadence_integrity.sql`: validates ET D->D+1 opinion/vote cadence.
 - `supabase/smoke_03_friends_leaderboard.sql`: validates global vs friends-only leaderboard scope.
+- `supabase/smoke_04_daily_cadence_automation.sql`: validates cron job + cadence automation function wiring.
 
 ### Time Standard (ET)
 
@@ -177,6 +180,10 @@ Run in Supabase SQL Editor in this order:
   - Submit opinions on day D (ET)
   - Vote on day D+1 (ET) for day D opinions
   - Winners for vote date D+1 are computed from opinions submitted on D
+- Automated daily cadence runs at midnight ET (with a 00:00-00:04 ET guarded window):
+  - close and publish for day D
+  - execute day-D pending buy/sell orders and repricing
+  - generate day-(D+1) vote assignments from day-D opinions
 - `created_at`/`executed_at` are `timestamptz` and stored in UTC by Postgres (expected).
   Convert to ET when displaying in UI or when deriving a business date.
 

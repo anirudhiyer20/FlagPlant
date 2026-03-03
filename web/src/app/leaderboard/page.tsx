@@ -136,7 +136,6 @@ function LeaderboardPanel({ userId }: { userId: string }) {
           Friends View
         </button>
       </div>
-      <p className="muted">Friends are mutual follows.</p>
 
       {loading ? (
         <>
@@ -151,48 +150,50 @@ function LeaderboardPanel({ userId }: { userId: string }) {
       ) : null}
 
       {!loading && !error && rows.length > 0 ? (
-        <table>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>User</th>
-              <th>Net Worth</th>
-              <th>Unplanted</th>
-              <th>FlagPlants Value</th>
-              <th>FlagPlants</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => {
-              const isCurrentUser = row.result_user_id === userId;
-              return (
-                <tr key={row.result_user_id}>
-                  <td>{row.result_rank}</td>
-                  <td>
-                    {isCurrentUser ? (
-                      <strong>
+        <div className="table-section-space">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>User</th>
+                <th>Net Worth</th>
+                <th>Unplanted</th>
+                <th>FlagPlants Value</th>
+                <th>FlagPlants</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const isCurrentUser = row.result_user_id === userId;
+                return (
+                  <tr key={row.result_user_id}>
+                    <td>{row.result_rank}</td>
+                    <td>
+                      {isCurrentUser ? (
+                        <strong>
+                          <Link href={`/profiles/${row.result_user_id}`}>
+                            {row.result_username} (You)
+                          </Link>
+                        </strong>
+                      ) : (
                         <Link href={`/profiles/${row.result_user_id}`}>
-                          {row.result_username} (You)
+                          {row.result_username}
                         </Link>
-                      </strong>
-                    ) : (
-                      <Link href={`/profiles/${row.result_user_id}`}>
-                        {row.result_username}
-                      </Link>
-                    )}
-                  </td>
-                  <td>{formatFlagAmount(row.result_net_worth)}</td>
-                  <td>{formatFlagAmount(row.result_liquid_flags)}</td>
-                  <td>{formatFlagAmount(row.result_holdings_value)}</td>
-                  <td>{row.result_holding_count}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      )}
+                    </td>
+                    <td>{formatFlagAmount(row.result_net_worth)}</td>
+                    <td>{formatFlagAmount(row.result_liquid_flags)}</td>
+                    <td>{formatFlagAmount(row.result_holdings_value)}</td>
+                    <td>{row.result_holding_count}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       ) : null}
 
-      <button type="button" onClick={loadLeaderboard} disabled={busy}>
+      <button type="button" onClick={loadLeaderboard} disabled={busy} className="table-top-space">
         {busy ? "Refreshing..." : "Refresh Leaderboard"}
       </button>
     </div>

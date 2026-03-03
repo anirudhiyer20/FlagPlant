@@ -111,7 +111,6 @@ export default function HomeYesterdayWinners() {
   return (
     <div className="card">
       <h2>Yesterday&apos;s Winners</h2>
-      <p className="muted">Target date: {yesterdayEt}</p>
       {loading ? (
         <>
           <LoadingState message="Loading winners..." />

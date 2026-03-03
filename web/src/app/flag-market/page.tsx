@@ -157,31 +157,32 @@ function PlayersTable() {
 
       {!loading && !error ? (
         <>
-          <p className="muted">Loaded players: {players.length}</p>
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Seed Price</th>
-                <th>Current Price</th>
-                <th>Holders</th>
-                <th>Planted Capital</th>
-              </tr>
-            </thead>
-            <tbody>
-              {players.map((player) => (
-                <tr key={player.id}>
-                  <td>
-                    <Link href={`/players/${player.id}`}>{player.name}</Link>
-                  </td>
-                  <td>{formatFlagAmount(player.seed_price)}</td>
-                  <td>{formatFlagAmount(player.current_price)}</td>
-                  <td>{player.holder_count}</td>
-                  <td>{formatFlagAmount(player.invested_capital)}</td>
+          <div className="table-top-space">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Seed Price</th>
+                  <th>Current Price</th>
+                  <th>Holders</th>
+                  <th>Planted Capital</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {players.map((player) => (
+                  <tr key={player.id}>
+                    <td>
+                      <Link href={`/players/${player.id}`}>{player.name}</Link>
+                    </td>
+                    <td>{formatFlagAmount(player.seed_price)}</td>
+                    <td>{formatFlagAmount(player.current_price)}</td>
+                    <td>{player.holder_count}</td>
+                    <td>{formatFlagAmount(player.invested_capital)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>
       ) : null}
     </div>
@@ -455,10 +456,6 @@ function OrdersPanel({ userId }: { userId: string }) {
 
       <div className="card">
         <h2>Recent Orders</h2>
-        <p className="muted">
-          Showing {recentFilter === "all" ? "All Processed" : recentFilter} order history
-          in pages of 10. Page {recentPage} of {totalPages}.
-        </p>
         <div className="tab-row">
           <button
             type="button"
@@ -500,47 +497,49 @@ function OrdersPanel({ userId }: { userId: string }) {
 
         {!loading && !error && recentOrders.length > 0 ? (
           <>
-            <table>
-              <thead>
-                <tr>
-                  <th>Processed</th>
-                  <th>Trade Date</th>
-                  <th>Player</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Flags</th>
-                  <th>Units</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentOrders.map((order) => (
-                  <tr key={order.id}>
-                    <td>
-                      {order.executed_at
-                        ? formatEasternDateTime(order.executed_at)
-                        : formatEasternDateTime(order.created_at)}
-                    </td>
-                    <td>{order.trade_date}</td>
-                    <td>
-                      <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
-                    </td>
-                    <td>{order.order_type}</td>
-                    <td>{order.status}</td>
-                    <td>
-                      {order.flags_amount === null
-                        ? "--"
-                        : formatFlagAmount(order.flags_amount)}
-                    </td>
-                    <td>
-                      {order.units_amount === null
-                        ? "--"
-                        : formatTwoDecimals(order.units_amount)}
-                    </td>
+            <div className="table-section-space">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Processed</th>
+                    <th>Trade Date</th>
+                    <th>Player</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Flags</th>
+                    <th>Units</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            <div className="tab-row">
+                </thead>
+                <tbody>
+                  {recentOrders.map((order) => (
+                    <tr key={order.id}>
+                      <td>
+                        {order.executed_at
+                          ? formatEasternDateTime(order.executed_at)
+                          : formatEasternDateTime(order.created_at)}
+                      </td>
+                      <td>{order.trade_date}</td>
+                      <td>
+                        <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
+                      </td>
+                      <td>{order.order_type}</td>
+                      <td>{order.status}</td>
+                      <td>
+                        {order.flags_amount === null
+                          ? "--"
+                          : formatFlagAmount(order.flags_amount)}
+                      </td>
+                      <td>
+                        {order.units_amount === null
+                          ? "--"
+                          : formatTwoDecimals(order.units_amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="tab-row table-top-space">
               <button
                 type="button"
                 className="secondary"

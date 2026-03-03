@@ -473,7 +473,10 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
           <div className="order-card-header">
             <h2>Place Buy Order</h2>
             <button type="button" className="order-card-badge" disabled>
-              Unplanted Flags: {formatFlagAmount(wallet?.liquid_flags)}
+              Unplanted Flags:{" "}
+              {formatFlagAmount(
+                Math.max((wallet?.liquid_flags ?? 0) - pendingBuyFlagsAll, 0)
+              )}
             </button>
           </div>
           <p className="muted">
