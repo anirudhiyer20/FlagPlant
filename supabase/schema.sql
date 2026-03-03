@@ -328,6 +328,18 @@ with check (
   auth.uid() = user_id
   and submitted_for_date = public.app_current_date_est()
 );
+drop policy if exists opinions_update_own_today on public.opinions;
+create policy opinions_update_own_today
+on public.opinions
+for update
+using (
+  auth.uid() = user_id
+  and submitted_for_date = public.app_current_date_est()
+)
+with check (
+  auth.uid() = user_id
+  and submitted_for_date = public.app_current_date_est()
+);
 drop policy if exists assignments_select_own on public.opinion_assignments;
 create policy assignments_select_own on public.opinion_assignments for select using (auth.uid() = viewer_user_id);
 drop policy if exists votes_select_own on public.opinion_votes;

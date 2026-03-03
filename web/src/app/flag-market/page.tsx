@@ -290,8 +290,8 @@ function PlayersTable() {
                     <th>League</th>
                     <th>Seed Price</th>
                     <th>Current Price</th>
-                    <th>Holders</th>
-                    <th>Planted Capital</th>
+                    <th>Flagbearers</th>
+                    <th>Total Flags Planted</th>
                   </tr>
                 </thead>
                 <tbody>

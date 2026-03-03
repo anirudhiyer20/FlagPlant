@@ -9,11 +9,13 @@ import RequireAuth from "@/components/require-auth";
 import TopNav from "@/components/top-nav";
 import { formatEasternDateTime, getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
+import { getLeagueBadgeStyle, normalizeLeagueLabel } from "@/lib/leagues";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type PlayerRow = {
   id: string;
   name: string;
+  league: string;
   active: boolean;
   seed_price: number;
   current_price: number;
@@ -78,17 +80,28 @@ export default function PlayerDetailPage() {
   return (
     <main>
       <TopNav />
-      <button type="button" onClick={onBack}>
-        Back
-      </button>
       <RequireAuth>
-        {(session) => <PlayerDetailPanel userId={session.user.id} playerId={playerId} />}
+        {(session) => (
+          <PlayerDetailPanel
+            userId={session.user.id}
+            playerId={playerId}
+            onBack={onBack}
+          />
+        )}
       </RequireAuth>
     </main>
   );
 }
 
-function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: string }) {
+function PlayerDetailPanel({
+  userId,
+  playerId,
+  onBack
+}: {
+  userId: string;
+  playerId: string;
+  onBack: () => void;
+}) {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [player, setPlayer] = useState<PlayerRow | null>(null);
   const [marketStats, setMarketStats] = useState({
@@ -126,7 +139,7 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
 
     const playerQuery = supabase
       .from("players")
-      .select("id,name,active,seed_price,current_price,baseline_capital")
+      .select("id,name,league,active,seed_price,current_price,baseline_capital")
       .eq("id", playerId)
       .single();
     const walletQuery = supabase
@@ -454,19 +467,42 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
 
   return (
     <>
-      <h1>{player?.name ?? "Player"}</h1>
+      <h1>
+        <span className="player-cell-with-league">
+          <span>{player?.name ?? "Player"}</span>
+          <span
+            className="league-badge"
+            style={getLeagueBadgeStyle(normalizeLeagueLabel(player?.league))}
+          >
+            {normalizeLeagueLabel(player?.league)}
+          </span>
+        </span>
+      </h1>
+      <button type="button" onClick={onBack}>
+        Back
+      </button>
       <div className="grid">
-      <div className="card">
-        <h2>Your Position</h2>
-        <p>Position Value (Flags): {formatFlagAmount(positionValueFlags)}</p>
-        <p>Units Held: {holding ? formatTwoDecimals(holding.units) : "0.00"}</p>
-        <p>
-          Avg. Cost Basis:{" "}
-          {holding ? formatFlagAmount(holding.avg_cost_basis) : formatFlagAmount(0)}
-        </p>
-        <p>Pending Buy Flags: {formatFlagAmount(pendingBuyFlags)}</p>
-        <p>Pending Sell Flags: {formatFlagAmount(pendingSellFlags)}</p>
-      </div>
+        <div className="two-col-cards">
+          <div className="card">
+            <h2>Your Position</h2>
+            <p>Flags Planted: {formatFlagAmount(positionValueFlags)}</p>
+            <p>Units Held: {holding ? formatTwoDecimals(holding.units) : "0.00"}</p>
+            <p>
+              Avg. Cost Basis:{" "}
+              {holding ? formatFlagAmount(holding.avg_cost_basis) : formatFlagAmount(0)}
+            </p>
+            <p>Pending Buy Flags: {formatFlagAmount(pendingBuyFlags)}</p>
+            <p>Pending Sell Flags: {formatFlagAmount(pendingSellFlags)}</p>
+          </div>
+
+          <div className="card">
+            <h2>Player Snapshot</h2>
+            <p>Seed Price: {formatFlagAmount(player?.seed_price)}</p>
+            <p>Current Price: {formatFlagAmount(player?.current_price)}</p>
+            <p>Flagbearers: {marketStats.holderCount}</p>
+            <p>Total Flags Planted: {formatFlagAmount(marketStats.investedCapital)}</p>
+          </div>
+        </div>
 
       <div className="two-col-cards">
         <div className="card">
@@ -479,27 +515,23 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
               )}
             </button>
           </div>
-          <p className="muted">
-            Creates a pending buy order. Admin order-clearing executes it at the current
-            market price.
-          </p>
+          <p className="muted">Executes at next close using current market price</p>
           <form className="grid order-form-gap" onSubmit={submitBuyOrder}>
-            <label>
-              Flags Amount
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={buyAmount}
-                onChange={(e) => setBuyAmount(e.target.value)}
-                required
-              />
-            </label>
+            <input
+              aria-label="Buy Flag Amount"
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="Enter Flag Amount..."
+              value={buyAmount}
+              onChange={(e) => setBuyAmount(e.target.value)}
+              required
+            />
             <button type="submit" disabled={busy}>
               {busy ? "Submitting..." : "Create Buy Order"}
             </button>
           </form>
-          <p className="muted">
+          <p className="muted table-top-space">
             Estimated Units At Current Price:{" "}
             {formatTwoDecimals(
               (Number.parseFloat(buyAmount || "0") || 0) / (player?.current_price || 1)
@@ -516,26 +548,23 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
               Available To Sell: {formatFlagAmount(availableSellFlags)}
             </button>
           </div>
-          <p className="muted">
-            Creates a pending sell order. Admin order-clearing executes it at the current market price.
-          </p>
+          <p className="muted">Executes at next close using current market price</p>
           <form className="grid order-form-gap" onSubmit={submitSellOrder}>
-            <label>
-              Flags Amount
-              <input
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={sellAmount}
-                onChange={(e) => setSellAmount(e.target.value)}
-                required
-              />
-            </label>
+            <input
+              aria-label="Sell Flag Amount"
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="Enter Flag Amount..."
+              value={sellAmount}
+              onChange={(e) => setSellAmount(e.target.value)}
+              required
+            />
             <button type="submit" disabled={busy}>
               {busy ? "Submitting..." : "Create Sell Order"}
             </button>
           </form>
-          <p className="muted">
+          <p className="muted table-top-space">
             Estimated Units At Current Price:{" "}
             {formatTwoDecimals(
               (Number.parseFloat(sellAmount || "0") || 0) / (player?.current_price || 1)
@@ -610,16 +639,6 @@ function PlayerDetailPanel({ userId, playerId }: { userId: string; playerId: str
             </tbody>
           </table>
         )}
-      </div>
-
-      <div className="card">
-        <h2>{player?.name ?? "Player"}</h2>
-        <p>Active: {player?.active ? "Yes" : "No"}</p>
-        <p>Seed Price: {formatFlagAmount(player?.seed_price)}</p>
-        <p>Current Price: {formatFlagAmount(player?.current_price)}</p>
-        <p>Baseline Capital: {formatFlagAmount(player?.baseline_capital)}</p>
-        <p>Holders: {marketStats.holderCount}</p>
-        <p>Planted Capital: {formatFlagAmount(marketStats.investedCapital)}</p>
       </div>
       </div>
     </>

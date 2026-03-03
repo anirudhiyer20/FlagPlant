@@ -55,6 +55,7 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
 
   const [body, setBody] = useState("");
   const [existingOpinion, setExistingOpinion] = useState<ExistingOpinion | null>(null);
+  const [isEditingOpinion, setIsEditingOpinion] = useState(false);
   const [items, setItems] = useState<VoteItem[]>([]);
   const [votedOpinionIds, setVotedOpinionIds] = useState<string[]>([]);
 
@@ -84,7 +85,12 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
       return;
     }
 
-    setExistingOpinion((data as ExistingOpinion | null) ?? null);
+    const row = (data as ExistingOpinion | null) ?? null;
+    setExistingOpinion(row);
+    if (!row) {
+      setBody("");
+      setIsEditingOpinion(false);
+    }
     setLoadingOpinion(false);
   }, [appDate, supabase, userId]);
 
@@ -202,7 +208,67 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
 
     setExistingOpinion(data as ExistingOpinion);
     setBody("");
-    setOpinionMessage("Submitted. You can post again tomorrow.");
+    setIsEditingOpinion(false);
+    setOpinionMessage("");
+    setBusyOpinion(false);
+  }
+
+  function startEditingOpinion() {
+    if (!existingOpinion) return;
+    setBody(existingOpinion.body);
+    setOpinionMessage("");
+    setOpinionError("");
+    setIsEditingOpinion(true);
+  }
+
+  function cancelEditingOpinion() {
+    setBody(existingOpinion?.body ?? "");
+    setOpinionMessage("");
+    setOpinionError("");
+    setIsEditingOpinion(false);
+  }
+
+  async function saveEditedOpinion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!existingOpinion) return;
+
+    setBusyOpinion(true);
+    setOpinionMessage("");
+    setOpinionError("");
+
+    const trimmed = body.trim();
+    if (!trimmed) {
+      setOpinionError("Opinion cannot be empty.");
+      setBusyOpinion(false);
+      return;
+    }
+
+    if (trimmed === existingOpinion.body.trim()) {
+      setOpinionMessage("No changes to save.");
+      setBusyOpinion(false);
+      setIsEditingOpinion(false);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("opinions")
+      .update({ body: trimmed })
+      .eq("id", existingOpinion.id)
+      .eq("user_id", userId)
+      .eq("submitted_for_date", appDate)
+      .select("id,body,created_at")
+      .single();
+
+    if (error) {
+      setOpinionError(error.message);
+      setBusyOpinion(false);
+      return;
+    }
+
+    setExistingOpinion(data as ExistingOpinion);
+    setBody("");
+    setIsEditingOpinion(false);
+    setOpinionMessage("Opinion updated for today.");
     setBusyOpinion(false);
   }
 
@@ -281,29 +347,59 @@ function BallKnowledgePanel({ userId }: { userId: string }) {
         {opinionMessage ? <p className="success">{opinionMessage}</p> : null}
         {opinionError ? <ErrorState message={opinionError} /> : null}
 
-        {!loadingOpinion && existingOpinion ? (
+        {!loadingOpinion && existingOpinion && !isEditingOpinion ? (
           <>
-            <p className="success">Submitted for today.</p>
             <p>{existingOpinion.body}</p>
+            <div className="table-top-space">
+              <button type="button" className="secondary" onClick={startEditingOpinion}>
+                Edit Submitted Opinion
+              </button>
+            </div>
           </>
+        ) : null}
+
+        {!loadingOpinion && existingOpinion && isEditingOpinion ? (
+          <form onSubmit={saveEditedOpinion} className="grid">
+            <textarea
+              aria-label="Edit Submitted Opinion"
+              required
+              minLength={1}
+              maxLength={280}
+              rows={5}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
+            <p className="muted">Characters: {body.length}/280</p>
+            <div className="tab-row">
+              <button disabled={busyOpinion} type="submit">
+                {busyOpinion ? "Saving..." : "Save Edit"}
+              </button>
+              <button
+                disabled={busyOpinion}
+                type="button"
+                className="secondary"
+                onClick={cancelEditingOpinion}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         ) : null}
 
         {!loadingOpinion && !existingOpinion ? (
           <form onSubmit={submitOpinion} className="grid">
-            <label>
-              Opinion (1-280 chars)
-              <textarea
-                required
-                minLength={1}
-                maxLength={280}
-                rows={5}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-              />
-            </label>
+            <textarea
+              aria-label="Daily Opinion"
+              required
+              minLength={1}
+              maxLength={280}
+              rows={5}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+            />
             <p className="muted">Characters: {body.length}/280</p>
             <button disabled={busyOpinion} type="submit">
-              {busyOpinion ? "Submitting..." : "Submit opinion"}
+              {busyOpinion ? "Submitting..." : "Submit Opinion"}
             </button>
           </form>
         ) : null}

@@ -33,6 +33,22 @@ type WinnerHistoryRow = {
 
 type LeaderboardTab = "leaderboard" | "winners";
 
+function formatWinnerDateLabel(rawDate: string): string {
+  const datePart = rawDate.split("T")[0] ?? rawDate;
+  const parts = datePart.split("-");
+  if (parts.length !== 3) return rawDate;
+
+  const monthNum = Number.parseInt(parts[1] ?? "", 10);
+  const dayNum = Number.parseInt(parts[2] ?? "", 10);
+  if (!Number.isFinite(monthNum) || !Number.isFinite(dayNum) || monthNum < 1 || monthNum > 12) {
+    return rawDate;
+  }
+
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthLabel = monthNames[monthNum - 1] ?? "";
+  return `${monthLabel}-${String(dayNum).padStart(2, "0")}`;
+}
+
 export default function LeaderboardPage() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("leaderboard");
@@ -204,12 +220,10 @@ function WinnerHistoryPanel() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [rows, setRows] = useState<WinnerHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [days, setDays] = useState(14);
 
   const loadHistory = useCallback(async () => {
-    setBusy(true);
     setError("");
 
     const { data, error: historyError } = await supabase.rpc(
@@ -221,13 +235,11 @@ function WinnerHistoryPanel() {
       setError(historyError.message);
       setRows([]);
       setLoading(false);
-      setBusy(false);
       return;
     }
 
     setRows((data ?? []) as WinnerHistoryRow[]);
     setLoading(false);
-    setBusy(false);
   }, [days, supabase]);
 
   useEffect(() => {
@@ -250,7 +262,7 @@ function WinnerHistoryPanel() {
   return (
     <div className="card">
       <label>
-        Days to show
+        Days To Show
         <input
           type="number"
           min="1"
@@ -260,9 +272,6 @@ function WinnerHistoryPanel() {
           onChange={(e) => setDays(Number.parseInt(e.target.value || "14", 10))}
         />
       </label>
-      <button type="button" onClick={loadHistory} disabled={busy}>
-        {busy ? "Refreshing..." : "Refresh Previous Winners"}
-      </button>
 
       {loading ? (
         <>
@@ -282,7 +291,7 @@ function WinnerHistoryPanel() {
       {!loading && !error
         ? orderedDates.map((winnerDate) => (
             <div className="card" key={winnerDate}>
-              <h2>{winnerDate}</h2>
+              <h2>{formatWinnerDateLabel(winnerDate)}</h2>
               <table>
                 <thead>
                   <tr>
