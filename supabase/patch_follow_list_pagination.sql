@@ -1,6 +1,8 @@
 -- Patch for existing projects:
 -- adds paginated/searchable/sortable follower/following list RPCs.
 
+create extension if not exists pg_trgm;
+
 drop function if exists public.get_follow_list_page(uuid, text, text, int, int);
 drop function if exists public.get_follow_list_page(uuid, text, text, text, boolean, int, int);
 drop function if exists public.get_follow_list_count(uuid, text, text);
@@ -285,3 +287,9 @@ grant execute on function public.get_follow_list_page(uuid, text, text, text, bo
 
 revoke all on function public.get_follow_list_count(uuid, text, text, boolean) from public;
 grant execute on function public.get_follow_list_count(uuid, text, text, boolean) to authenticated;
+
+create index if not exists idx_user_follows_followed_follower on public.user_follows (followed_user_id, follower_user_id);
+create index if not exists idx_user_follows_followed_created_at on public.user_follows (followed_user_id, created_at desc);
+create index if not exists idx_user_follows_follower_created_at on public.user_follows (follower_user_id, created_at desc);
+create index if not exists idx_holdings_user_active on public.holdings (user_id) where units > 0.005::numeric;
+create index if not exists idx_profiles_username_trgm on public.profiles using gin (username gin_trgm_ops);

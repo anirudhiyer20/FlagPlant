@@ -2,6 +2,7 @@
 -- Run in Supabase SQL editor.
 
 create extension if not exists pgcrypto;
+create extension if not exists pg_trgm;
 
 create or replace function public.app_current_date_est()
 returns date
@@ -220,6 +221,11 @@ create index if not exists idx_orders_trade_date_status on public.orders (trade_
 create index if not exists idx_holdings_user on public.holdings (user_id);
 create index if not exists idx_user_follows_followed on public.user_follows (followed_user_id);
 create index if not exists idx_user_follows_follower on public.user_follows (follower_user_id);
+create index if not exists idx_user_follows_followed_follower on public.user_follows (followed_user_id, follower_user_id);
+create index if not exists idx_user_follows_followed_created_at on public.user_follows (followed_user_id, created_at desc);
+create index if not exists idx_user_follows_follower_created_at on public.user_follows (follower_user_id, created_at desc);
+create index if not exists idx_holdings_user_active on public.holdings (user_id) where units > 0.005::numeric;
+create index if not exists idx_profiles_username_trgm on public.profiles using gin (username gin_trgm_ops);
 
 -- ===== Trigger: updated_at =====
 create or replace function public.set_updated_at()

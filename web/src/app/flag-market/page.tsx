@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import RequireAuth from "@/components/require-auth";
 import TopNav from "@/components/top-nav";
 import { CardSkeleton, TableSkeleton } from "@/components/ui-skeletons";
@@ -49,6 +49,30 @@ type OrderViewRow = OrderRow & {
 type TabKey = "available_players" | "my_orders";
 type RecentOrderFilter = "executed" | "failed" | "cancelled" | "all";
 
+const MONTH_SHORT_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec"
+] as const;
+
+function formatTradeDateMMMDD(tradeDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(tradeDate);
+  if (!match) return tradeDate;
+  const monthIndex = Number(match[2]) - 1;
+  const day = match[3];
+  if (monthIndex < 0 || monthIndex > 11) return tradeDate;
+  return `${MONTH_SHORT_NAMES[monthIndex]}-${day}`;
+}
+
 export default function FlagMarketPage() {
   return (
     <main>
@@ -92,6 +116,8 @@ function FlagMarketPanel({ userId }: { userId: string }) {
 function PlayersTable() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -146,43 +172,83 @@ function PlayersTable() {
     });
   }, [loadPlayers]);
 
+  const filteredPlayers = useMemo(() => {
+    const normalized = searchQuery.trim().toLowerCase();
+    if (normalized.length === 0) return players;
+    return players.filter((player) => player.name.toLowerCase().includes(normalized));
+  }, [players, searchQuery]);
+
+  function submitSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearchQuery(searchInput.trim());
+  }
+
   return (
     <div className="card">
       <h2>Available Players</h2>
-      <button type="button" onClick={loadPlayers} disabled={loading}>
-        {loading ? "Loading..." : "Refresh Players"}
-      </button>
+      <div className="players-controls-row">
+        <form className="players-search-row" onSubmit={submitSearch}>
+          <input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Search Players..."
+            aria-label="Search Players"
+          />
+          <button type="submit" className="connections-search-button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M15.5 14h-.79l-.28-.27a6 6 0 1 0-.71.71l.27.28v.79L20 21.5 21.5 20zM10 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"
+                fill="currentColor"
+              />
+            </svg>
+            Search
+          </button>
+        </form>
+        <button type="button" onClick={loadPlayers} disabled={loading}>
+          {loading ? "Loading..." : "Refresh"}
+        </button>
+      </div>
       {error ? <ErrorState message={error} /> : null}
       {loading ? <TableSkeleton columns={5} rows={8} /> : null}
 
       {!loading && !error ? (
         <>
-          <div className="table-top-space">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Seed Price</th>
-                  <th>Current Price</th>
-                  <th>Holders</th>
-                  <th>Planted Capital</th>
-                </tr>
-              </thead>
-              <tbody>
-                {players.map((player) => (
-                  <tr key={player.id}>
-                    <td>
-                      <Link href={`/players/${player.id}`}>{player.name}</Link>
-                    </td>
-                    <td>{formatFlagAmount(player.seed_price)}</td>
-                    <td>{formatFlagAmount(player.current_price)}</td>
-                    <td>{player.holder_count}</td>
-                    <td>{formatFlagAmount(player.invested_capital)}</td>
+          {filteredPlayers.length === 0 ? (
+            <EmptyState
+              message={
+                searchQuery
+                  ? `No Players Match "${searchQuery}".`
+                  : "No Players Available."
+              }
+            />
+          ) : (
+            <div className="table-top-space">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Seed Price</th>
+                    <th>Current Price</th>
+                    <th>Holders</th>
+                    <th>Planted Capital</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {filteredPlayers.map((player) => (
+                    <tr key={player.id}>
+                      <td>
+                        <Link href={`/players/${player.id}`}>{player.name}</Link>
+                      </td>
+                      <td>{formatFlagAmount(player.seed_price)}</td>
+                      <td>{formatFlagAmount(player.current_price)}</td>
+                      <td>{player.holder_count}</td>
+                      <td>{formatFlagAmount(player.invested_capital)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       ) : null}
     </div>
@@ -319,10 +385,6 @@ function OrdersPanel({ userId }: { userId: string }) {
     [enrichOrdersWithPlayerNames, recentFilter, supabase, userId]
   );
 
-  const refreshOrders = useCallback(async () => {
-    await Promise.all([loadPendingOrders(), loadRecentOrders(recentPage, recentFilter)]);
-  }, [loadPendingOrders, loadRecentOrders, recentFilter, recentPage]);
-
   const cancelPendingOrder = useCallback(
     async (orderId: string) => {
       setCancellingOrderId(orderId);
@@ -376,13 +438,6 @@ function OrdersPanel({ userId }: { userId: string }) {
 
   return (
     <div className="grid">
-      <div className="card">
-        <h2>My Orders</h2>
-        <button type="button" onClick={refreshOrders} disabled={pendingBusy || recentBusy}>
-          {pendingBusy || recentBusy ? "Refreshing..." : "Refresh Orders"}
-        </button>
-      </div>
-
       {loading ? (
         <>
           <LoadingState message="Loading orders..." />
@@ -402,24 +457,31 @@ function OrdersPanel({ userId }: { userId: string }) {
         ) : null}
 
         {!loading && !error && pendingOrders.length > 0 ? (
-          <table>
+          <table className="orders-pending-table">
+            <colgroup>
+              <col className="orders-pending-col-trade-date" />
+              <col className="orders-pending-col-player" />
+              <col className="orders-pending-col-type" />
+              <col className="orders-pending-col-status" />
+              <col className="orders-pending-col-flags" />
+              <col className="orders-pending-col-units" />
+              <col className="orders-pending-col-action" />
+            </colgroup>
             <thead>
               <tr>
-                <th>Created</th>
                 <th>Trade Date</th>
                 <th>Player</th>
                 <th>Type</th>
                 <th>Status</th>
                 <th>Flags</th>
                 <th>Units</th>
-                <th>Action</th>
+                <th className="orders-pending-col-action">Action</th>
               </tr>
             </thead>
             <tbody>
               {pendingOrders.map((order) => (
                 <tr key={order.id}>
-                  <td>{formatEasternDateTime(order.created_at)}</td>
-                  <td>{order.trade_date}</td>
+                  <td>{formatTradeDateMMMDD(order.trade_date)}</td>
                   <td>
                     <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
                   </td>
@@ -435,7 +497,7 @@ function OrdersPanel({ userId }: { userId: string }) {
                       ? "--"
                       : formatTwoDecimals(order.units_amount)}
                   </td>
-                  <td>
+                  <td className="orders-pending-col-action">
                     <button
                       type="button"
                       className="secondary"
@@ -501,24 +563,19 @@ function OrdersPanel({ userId }: { userId: string }) {
               <table>
                 <thead>
                   <tr>
-                    <th>Processed</th>
                     <th>Trade Date</th>
                     <th>Player</th>
                     <th>Type</th>
                     <th>Status</th>
                     <th>Flags</th>
                     <th>Units</th>
+                    <th>Processed</th>
                   </tr>
                 </thead>
                 <tbody>
                   {recentOrders.map((order) => (
                     <tr key={order.id}>
-                      <td>
-                        {order.executed_at
-                          ? formatEasternDateTime(order.executed_at)
-                          : formatEasternDateTime(order.created_at)}
-                      </td>
-                      <td>{order.trade_date}</td>
+                      <td>{formatTradeDateMMMDD(order.trade_date)}</td>
                       <td>
                         <Link href={`/players/${order.player_id}`}>{order.player_name}</Link>
                       </td>
@@ -533,6 +590,11 @@ function OrdersPanel({ userId }: { userId: string }) {
                         {order.units_amount === null
                           ? "--"
                           : formatTwoDecimals(order.units_amount)}
+                      </td>
+                      <td>
+                        {order.executed_at
+                          ? formatEasternDateTime(order.executed_at)
+                          : formatEasternDateTime(order.created_at)}
                       </td>
                     </tr>
                   ))}

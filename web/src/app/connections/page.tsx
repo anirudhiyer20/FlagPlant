@@ -31,8 +31,18 @@ type FollowStateRow = {
   result_following_count: number;
 };
 
-type PublicProfileSnapshotRow = {
+type ConnectionDetailSnapshotRow = {
+  result_user_id: string;
   result_username: string;
+  result_net_worth: number | string | null;
+  result_holding_count: number;
+  result_top_holding_player_name: string | null;
+  result_top_holding_value: number | string | null;
+  result_latest_winner_date: string | null;
+  result_latest_winner_rank: number | null;
+  result_latest_winner_votes: number | null;
+  result_latest_winner_reward_flags: number | string | null;
+  result_latest_winner_opinion: string | null;
 };
 
 type ListKind = "followers" | "following";
@@ -47,6 +57,16 @@ function parseListKind(value: string | null): ListKind {
 function parseSortKind(value: string): SortKind {
   if (value === "oldest" || value === "net_worth") return value;
   return "newest";
+}
+
+function parseBooleanParam(value: string | null): boolean {
+  return value === "1" || value === "true";
+}
+
+function parsePageParam(value: string | null): number {
+  const parsed = Number.parseInt(value ?? "1", 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return parsed;
 }
 
 function formatEasternMonthDay(value: string): string {
@@ -84,55 +104,87 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
   const searchParams = useSearchParams();
   const targetFromQuery = searchParams.get("user");
   const tabFromQuery = parseListKind(searchParams.get("tab"));
+  const searchFromQueryRaw = searchParams.get("q") ?? "";
+  const searchFromQuery = searchFromQueryRaw.trim();
+  const sortFromQuery = parseSortKind(searchParams.get("sort") ?? "newest");
+  const mutualFromQuery = parseBooleanParam(searchParams.get("mutual"));
+  const pageFromQuery = parsePageParam(searchParams.get("page"));
   const targetUserId =
     targetFromQuery && targetFromQuery.length > 0 ? targetFromQuery : viewerUserId;
   const isSelf = targetUserId === viewerUserId;
 
-  const [activeTab, setActiveTab] = useState<ListKind>(tabFromQuery);
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortKind, setSortKind] = useState<SortKind>("newest");
-  const [mutualOnly, setMutualOnly] = useState(false);
-  const [page, setPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<ListKind>(() => tabFromQuery);
+  const [searchInput, setSearchInput] = useState(() => searchFromQueryRaw);
+  const [searchQuery, setSearchQuery] = useState(() => searchFromQuery);
+  const [sortKind, setSortKind] = useState<SortKind>(() => sortFromQuery);
+  const [mutualOnly, setMutualOnly] = useState(() => mutualFromQuery);
+  const [page, setPage] = useState(() => pageFromQuery);
   const [rows, setRows] = useState<FollowListRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [followState, setFollowState] = useState<FollowStateRow | null>(null);
-  const [targetUsername, setTargetUsername] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [rowBusyUserId, setRowBusyUserId] = useState<string | null>(null);
+  const [selectedDetailUserId, setSelectedDetailUserId] = useState<string | null>(null);
+  const [detailLoadingUserId, setDetailLoadingUserId] = useState<string | null>(null);
+  const [detailCache, setDetailCache] = useState<
+    Record<string, ConnectionDetailSnapshotRow | null>
+  >({});
+  const [detailError, setDetailError] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     setActiveTab(tabFromQuery);
-  }, [tabFromQuery]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [activeTab, searchQuery, sortKind, mutualOnly, targetUserId]);
+    setSearchInput(searchFromQueryRaw);
+    setSearchQuery(searchFromQuery);
+    setSortKind(sortFromQuery);
+    setMutualOnly(mutualFromQuery);
+    setPage(pageFromQuery);
+  }, [
+    tabFromQuery,
+    searchFromQueryRaw,
+    searchFromQuery,
+    sortFromQuery,
+    mutualFromQuery,
+    pageFromQuery,
+    targetUserId
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
-  const updateRoute = useCallback(
-    (nextTab: ListKind) => {
-      const params = new URLSearchParams(searchParams.toString());
-      params.set("tab", nextTab);
-      if (isSelf) {
-        params.delete("user");
-      } else {
+  const syncRoute = useCallback(
+    (next: Partial<{ tab: ListKind; q: string; sort: SortKind; mutual: boolean; page: number }>) => {
+      const resolvedTab = next.tab ?? activeTab;
+      const resolvedQuery = (next.q ?? searchQuery).trim();
+      const resolvedSort = next.sort ?? sortKind;
+      const resolvedMutual = next.mutual ?? mutualOnly;
+      const resolvedPage = Math.max(1, next.page ?? page);
+
+      const params = new URLSearchParams();
+      params.set("tab", resolvedTab);
+      if (!isSelf) {
         params.set("user", targetUserId);
+      }
+      if (resolvedQuery.length > 0) {
+        params.set("q", resolvedQuery);
+      }
+      if (resolvedSort !== "newest") {
+        params.set("sort", resolvedSort);
+      }
+      if (resolvedMutual) {
+        params.set("mutual", "1");
+      }
+      if (resolvedPage > 1) {
+        params.set("page", String(resolvedPage));
       }
       router.replace(`/connections?${params.toString()}`);
     },
-    [isSelf, router, searchParams, targetUserId]
+    [activeTab, isSelf, mutualOnly, page, router, searchQuery, sortKind, targetUserId]
   );
 
   const loadMeta = useCallback(async () => {
-    const [followStateResult, profileSnapshotResult] = await Promise.all([
-      supabase.rpc("get_follow_state", { target_user_id: targetUserId }),
-      isSelf
-        ? Promise.resolve({ data: [{ result_username: "You" }], error: null })
-        : supabase.rpc("get_public_profile_snapshot", { target_user_id: targetUserId })
-    ]);
+    const followStateResult = await supabase.rpc("get_follow_state", {
+      target_user_id: targetUserId
+    });
 
     if (followStateResult.error) {
       setError(followStateResult.error.message);
@@ -142,14 +194,7 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
 
     const followRows = (followStateResult.data ?? []) as FollowStateRow[];
     setFollowState(followRows[0] ?? null);
-
-    if (profileSnapshotResult.error) {
-      setTargetUsername(targetUserId);
-    } else {
-      const profileRows = (profileSnapshotResult.data ?? []) as PublicProfileSnapshotRow[];
-      setTargetUsername(profileRows[0]?.result_username ?? targetUserId);
-    }
-  }, [isSelf, supabase, targetUserId]);
+  }, [supabase, targetUserId]);
 
   const loadConnections = useCallback(async () => {
     setLoadingList(true);
@@ -218,14 +263,10 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const nextQuery = searchInput.trim();
+    setSearchQuery(nextQuery);
     setPage(1);
-    setSearchQuery(searchInput.trim());
-  }
-
-  function clearSearch() {
-    setSearchInput("");
-    setSearchQuery("");
-    setPage(1);
+    syncRoute({ q: nextQuery, page: 1 });
   }
 
   async function toggleRowFollow(row: FollowListRow) {
@@ -252,6 +293,43 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
     setRowBusyUserId(null);
   }
 
+  async function openConnectionDetail(userId: string) {
+    if (selectedDetailUserId === userId) {
+      setSelectedDetailUserId(null);
+      setDetailLoadingUserId(null);
+      setDetailError("");
+      return;
+    }
+
+    setSelectedDetailUserId(userId);
+    setDetailError("");
+
+    if (detailCache[userId] !== undefined) {
+      return;
+    }
+
+    setDetailLoadingUserId(userId);
+    const { data, error: detailLoadError } = await supabase.rpc(
+      "get_public_profile_snapshot",
+      {
+        target_user_id: userId
+      }
+    );
+
+    if (detailLoadError) {
+      setDetailError(detailLoadError.message);
+      setDetailLoadingUserId(null);
+      return;
+    }
+
+    const detailRows = (data ?? []) as ConnectionDetailSnapshotRow[];
+    setDetailCache((current) => ({
+      ...current,
+      [userId]: detailRows[0] ?? null
+    }));
+    setDetailLoadingUserId(null);
+  }
+
   const listLabel = activeTab === "followers" ? "Followers" : "Following";
   const emptyMessage = searchQuery
     ? mutualOnly
@@ -260,13 +338,40 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
     : mutualOnly
       ? `No Mutual ${listLabel} Found Yet.`
       : `No ${listLabel} Found Yet.`;
+  const selectedDetail =
+    selectedDetailUserId === null ? null : (detailCache[selectedDetailUserId] ?? null);
+  const selectedRow =
+    selectedDetailUserId === null
+      ? null
+      : rows.find((row) => row.result_user_id === selectedDetailUserId) ?? null;
 
   return (
     <div className="grid">
       <div className="card connections-toolbar">
-        <div className="connections-summary">
-          <div>
-            <h2>{isSelf ? "Your Connections" : `${targetUsername || "User"}'s Connections`}</h2>
+        <div className="connections-top-row">
+          <div className="tab-row">
+            <button
+              type="button"
+              className={activeTab === "followers" ? "" : "secondary"}
+              onClick={() => {
+                setActiveTab("followers");
+                setPage(1);
+                syncRoute({ tab: "followers", page: 1 });
+              }}
+            >
+              Followers ({followState?.result_follower_count ?? 0})
+            </button>
+            <button
+              type="button"
+              className={activeTab === "following" ? "" : "secondary"}
+              onClick={() => {
+                setActiveTab("following");
+                setPage(1);
+                syncRoute({ tab: "following", page: 1 });
+              }}
+            >
+              Following ({followState?.result_following_count ?? 0})
+            </button>
           </div>
           <button
             type="button"
@@ -274,29 +379,6 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
             onClick={() => router.push(isSelf ? "/dashboard" : `/profiles/${targetUserId}`)}
           >
             {isSelf ? "Back To User Profile" : "Back To Public Profile"}
-          </button>
-        </div>
-
-        <div className="tab-row">
-          <button
-            type="button"
-            className={activeTab === "followers" ? "" : "secondary"}
-            onClick={() => {
-              setActiveTab("followers");
-              updateRoute("followers");
-            }}
-          >
-            Followers ({followState?.result_follower_count ?? 0})
-          </button>
-          <button
-            type="button"
-            className={activeTab === "following" ? "" : "secondary"}
-            onClick={() => {
-              setActiveTab("following");
-              updateRoute("following");
-            }}
-          >
-            Following ({followState?.result_following_count ?? 0})
           </button>
         </div>
 
@@ -309,9 +391,14 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
               placeholder="Type a username..."
             />
           </label>
-          <button type="submit">Search</button>
-          <button type="button" className="secondary" onClick={clearSearch}>
-            Clear
+          <button type="submit" className="connections-search-button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M15.5 14h-.79l-.28-.27a6 6 0 1 0-.71.71l.27.28v.79L20 21.5 21.5 20zM10 15a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"
+                fill="currentColor"
+              />
+            </svg>
+            Search
           </button>
         </form>
 
@@ -320,7 +407,12 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
             Sort By
             <select
               value={sortKind}
-              onChange={(event) => setSortKind(parseSortKind(event.target.value))}
+              onChange={(event) => {
+                const nextSort = parseSortKind(event.target.value);
+                setSortKind(nextSort);
+                setPage(1);
+                syncRoute({ sort: nextSort, page: 1 });
+              }}
             >
               <option value="newest">Newest</option>
               <option value="oldest">Oldest</option>
@@ -331,7 +423,12 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
             type="button"
             aria-pressed={mutualOnly}
             className={mutualOnly ? "" : "secondary"}
-            onClick={() => setMutualOnly((current) => !current)}
+            onClick={() => {
+              const nextMutual = !mutualOnly;
+              setMutualOnly(nextMutual);
+              setPage(1);
+              syncRoute({ mutual: nextMutual, page: 1 });
+            }}
           >
             {mutualOnly ? "Viewing Mutuals Only" : "Show Mutuals Only"}
           </button>
@@ -354,10 +451,6 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
             <EmptyState message={emptyMessage} />
           ) : (
             <>
-              <p className="muted connections-list-meta">
-                Showing {rows.length} Of {totalCount} {listLabel}
-                {mutualOnly ? " (Mutuals Only)" : ""}
-              </p>
               <table className="connections-table">
                 <colgroup>
                   <col className="connections-col-user" />
@@ -391,45 +484,131 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
                       <td>{formatNetWorth(row.result_net_worth)}</td>
                       <td>{formatEasternMonthDay(row.result_followed_at)}</td>
                       <td className="connections-col-action">
-                        {row.result_user_id === viewerUserId ? (
-                          <span className="muted">You</span>
-                        ) : (
+                        <div className="connections-action-group">
+                          {row.result_user_id === viewerUserId ? (
+                            <span className="muted">You</span>
+                          ) : (
+                            <button
+                              type="button"
+                              className={row.result_is_following ? "secondary" : ""}
+                              disabled={rowBusyUserId === row.result_user_id}
+                              onClick={() => {
+                                toggleRowFollow(row).catch((toggleError: unknown) => {
+                                  const msg =
+                                    toggleError instanceof Error
+                                      ? toggleError.message
+                                      : "Unknown follow toggle error";
+                                  setError(msg);
+                                  setRowBusyUserId(null);
+                                });
+                              }}
+                            >
+                              {rowBusyUserId === row.result_user_id
+                                ? "Saving..."
+                                : row.result_is_following
+                                  ? "Unfollow"
+                                  : row.result_follows_you
+                                    ? "Follow Back"
+                                    : "Follow"}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            className={row.result_is_following ? "secondary" : ""}
-                            disabled={rowBusyUserId === row.result_user_id}
+                            className={
+                              selectedDetailUserId === row.result_user_id ? "" : "secondary"
+                            }
                             onClick={() => {
-                              toggleRowFollow(row).catch((toggleError: unknown) => {
-                                const msg =
-                                  toggleError instanceof Error
-                                    ? toggleError.message
-                                    : "Unknown follow toggle error";
-                                setError(msg);
-                                setRowBusyUserId(null);
-                              });
+                              openConnectionDetail(row.result_user_id).catch(
+                                (detailLoadError: unknown) => {
+                                  const msg =
+                                    detailLoadError instanceof Error
+                                      ? detailLoadError.message
+                                      : "Unknown detail load error";
+                                  setDetailError(msg);
+                                  setDetailLoadingUserId(null);
+                                }
+                              );
                             }}
                           >
-                            {rowBusyUserId === row.result_user_id
-                              ? "Saving..."
-                              : row.result_is_following
-                                ? "Unfollow"
-                                : row.result_follows_you
-                                  ? "Follow Back"
-                                  : "Follow"}
+                            {selectedDetailUserId === row.result_user_id
+                              ? "Close View"
+                              : "Quick View"}
                           </button>
-                        )}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
 
+              {selectedDetailUserId ? (
+                <div className="connections-detail-panel">
+                  <div className="connections-detail-header">
+                    <h3>
+                      {selectedRow?.result_username ??
+                        selectedDetail?.result_username ??
+                        "Connection Detail"}
+                    </h3>
+                  </div>
+
+                  {detailLoadingUserId === selectedDetailUserId ? (
+                    <p className="muted">Loading Detail...</p>
+                  ) : null}
+
+                  {detailError ? <p className="error">{detailError}</p> : null}
+
+                  {selectedDetail && detailLoadingUserId !== selectedDetailUserId ? (
+                    <div className="connections-detail-columns">
+                      <div className="connections-detail-column">
+                        <p>
+                          Net Worth:{" "}
+                          <strong>{formatNetWorth(selectedDetail.result_net_worth)}</strong>
+                        </p>
+                        <p>
+                          FlagPlants Count: <strong>{selectedDetail.result_holding_count}</strong>
+                        </p>
+                        <p>
+                          Top FlagPlant:{" "}
+                          <strong>
+                            {selectedDetail.result_top_holding_player_name
+                              ? `${selectedDetail.result_top_holding_player_name} (${formatNetWorth(selectedDetail.result_top_holding_value)})`
+                              : "--"}
+                          </strong>
+                        </p>
+                      </div>
+                      <div className="connections-detail-column">
+                        <p>
+                          Latest Winner Date:{" "}
+                          <strong>{selectedDetail.result_latest_winner_date ?? "--"}</strong>
+                        </p>
+                        <p>
+                          Latest Winner Reward:{" "}
+                          <strong>
+                            {selectedDetail.result_latest_winner_reward_flags === null
+                              ? "--"
+                              : formatNetWorth(selectedDetail.result_latest_winner_reward_flags)}
+                          </strong>
+                        </p>
+                        <p>
+                          Latest Winning Opinion:{" "}
+                          <strong>{selectedDetail.result_latest_winner_opinion ?? "--"}</strong>
+                        </p>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="connections-pagination">
                 <button
                   type="button"
                   className="secondary"
                   disabled={page <= 1}
-                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                  onClick={() => {
+                    const nextPage = Math.max(page - 1, 1);
+                    setPage(nextPage);
+                    syncRoute({ page: nextPage });
+                  }}
                 >
                   Previous Page
                 </button>
@@ -439,7 +618,11 @@ function ConnectionsPanel({ viewerUserId }: { viewerUserId: string }) {
                 <button
                   type="button"
                   disabled={page >= totalPages}
-                  onClick={() => setPage((prev) => Math.min(prev + 1, totalPages))}
+                  onClick={() => {
+                    const nextPage = Math.min(page + 1, totalPages);
+                    setPage(nextPage);
+                    syncRoute({ page: nextPage });
+                  }}
                 >
                   Next Page
                 </button>
