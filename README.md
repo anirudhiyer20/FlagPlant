@@ -34,12 +34,14 @@ In Supabase dashboard for your new project:
    - `service_role key` (never expose in frontend)
 3. Open **SQL Editor**.
 
-## 3) Run database schema
+## 3) Run database schema (migration baseline)
 
-1. Open `supabase/schema.sql` from this repo.
+1. Open `supabase/migrations/20260303000100_baseline.sql` from this repo.
 2. Copy all SQL.
 3. Paste into Supabase SQL Editor and run.
 4. Confirm tables were created in **Table Editor**.
+
+`supabase/schema.sql` is kept as a schema snapshot for reference.
 
 ## 4) Seed initial player list
 
@@ -112,65 +114,24 @@ A starter Next.js app now exists in `web/` with:
 - Public profile page (`/profiles/[id]`) with limited portfolio + winner visibility
 - Winner history page (`/winners`) for previous daily top-5 boards
 
-If you already set up Supabase before this update, run
-`supabase/patch_est_cadence_backfill.sql` once in Supabase SQL Editor to
-normalize existing opinion/vote date fields to ET cadence.
-Then run `supabase/patch_vote_policy.sql` once in Supabase SQL Editor to apply
-the latest ET/day-cadence RLS policy changes for voting reads/inserts.
-Also run `supabase/patch_admin_winners.sql` once to add admin winner RPC tools.
-Also run `supabase/patch_order_budget_policy.sql` once to enforce combined
-pending buy-order budget limits against wallet balance.
-Also run `supabase/patch_order_execution.sql` once to add admin order-clearing
-RPC tools (pending buy/sell execution into holdings/wallet/ledger).
-Also run `supabase/patch_order_cancellation.sql` once to add authenticated pending-order cancellation RPC.
-Also run `supabase/patch_repricing.sql` once to add admin repricing preview/apply
-RPC tools (price updates based on executed order flow).
-Also run `supabase/patch_player_market_stats.sql` once to add player card market
-stats RPC (`holders` and `invested capital`).
-Also run `supabase/patch_player_price_history.sql` once to add player historical
-price RPC for charting (`7d`, `30d`, `all-time`).
-Also run `supabase/patch_leaderboard.sql` once to add leaderboard snapshot RPC.
-Also run `supabase/patch_leaderboard_scope.sql` once to add server-side friends-only leaderboard filtering RPC.
-Also run `supabase/patch_public_profiles.sql` once to add public profile view RPCs.
-Also run `supabase/patch_winner_history.sql` once to add winner-history RPC.
-Also run `supabase/patch_portfolio_history.sql` once to add portfolio history RPC for charting.
-Also run `supabase/patch_portfolio_persistence.sql` once to add persistent end-of-day portfolio snapshots and snapshot-backed history reads.
-Also run `supabase/patch_follows.sql` once to add follow/unfollow social graph RPCs.
-Also run `supabase/patch_follow_list_pagination.sql` once to add follower/following list search + pagination RPCs.
-Also run `supabase/patch_daily_close.sql` once to add one-click admin daily-close pipeline RPC.
-Also run `supabase/patch_manual_price_override.sql` once to add admin manual player price override RPC.
-Also run `supabase/patch_player_leagues_and_admin_create.sql` once to add player league metadata and an admin RPC for creating new players in-market.
-Also run `supabase/patch_opinion_edit_policy.sql` once to allow users to edit their own same-day opinion before ET day close.
-Also run `supabase/patch_admin_diagnostics.sql` once to add admin diagnostics RPCs for daily-close health, job logs, and recent order-execution activity.
-Also run `supabase/patch_daily_cadence_automation.sql` once to enable automated midnight ET daily cadence (close D, publish winners for D, assign D opinions for D+1 voting).
+### Migration-First Workflow (New Standard)
 
-### Existing Project Patch Order (Recommended)
+- Database changes now live in `supabase/migrations/`.
+- For a new project, run the latest baseline migration SQL first, then seed data.
+- For future database changes, create a new migration file instead of creating a new `patch_*.sql`.
+- Legacy patch scripts are archived in `supabase/legacy-patches/` for historical reference only.
+- Detailed migration map and rollout checklist: `docs/migrations-first-map.md`.
 
-Run in Supabase SQL Editor in this order:
+### Existing Project Upgrade Note
 
-1. `supabase/patch_est_cadence_backfill.sql`
-2. `supabase/patch_vote_policy.sql`
-3. `supabase/patch_admin_winners.sql`
-4. `supabase/patch_order_budget_policy.sql`
-5. `supabase/patch_order_execution.sql`
-6. `supabase/patch_order_cancellation.sql`
-7. `supabase/patch_repricing.sql`
-8. `supabase/patch_player_market_stats.sql`
-9. `supabase/patch_player_price_history.sql`
-10. `supabase/patch_leaderboard.sql`
-11. `supabase/patch_leaderboard_scope.sql`
-12. `supabase/patch_public_profiles.sql`
-13. `supabase/patch_winner_history.sql`
-14. `supabase/patch_portfolio_history.sql`
-15. `supabase/patch_portfolio_persistence.sql`
-16. `supabase/patch_follows.sql`
-17. `supabase/patch_follow_list_pagination.sql`
-18. `supabase/patch_daily_close.sql`
-19. `supabase/patch_manual_price_override.sql`
-20. `supabase/patch_player_leagues_and_admin_create.sql`
-21. `supabase/patch_opinion_edit_policy.sql`
-22. `supabase/patch_admin_diagnostics.sql`
-23. `supabase/patch_daily_cadence_automation.sql`
+If your current database is already working and has all prior patch changes applied,
+you do not need to replay archived patch files.
+
+Going forward:
+
+1. Treat your current production schema as already at baseline.
+2. Apply only new migration files created after `20260303000100_baseline.sql`.
+3. Keep using the smoke tests below after each DB change.
 
 ### SQL Smoke Tests
 
