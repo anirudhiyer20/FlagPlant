@@ -191,6 +191,29 @@ Current smoke scope:
 2. Auth page renders sign-in form.
 3. Protected pages show signed-out guidance.
 
+Optional authenticated smoke:
+
+- `npm run test:e2e:auth`
+- requires env vars:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+  - `E2E_TEST_EMAIL`
+  - `E2E_TEST_PASSWORD`
+
+GitHub Actions runs authenticated smoke only when corresponding repository secrets are set.
+
+To enable authenticated smoke in CI:
+
+1. Create a dedicated test user in your Supabase Auth project (do not use your personal admin account).
+2. Ensure the test user can sign in with password auth.
+3. In GitHub repo settings, open **Settings -> Secrets and variables -> Actions**.
+4. Add secrets:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `E2E_TEST_EMAIL`
+   - `E2E_TEST_PASSWORD`
+5. Push a commit touching `web/**` and confirm `Web Smoke Tests` runs authenticated smoke.
+
 ### Existing Project Upgrade Note
 
 If your current database is already working and has all prior patch changes applied,
