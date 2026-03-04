@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+function envOrDefault(value: string | undefined, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  if (value.trim().length === 0) return fallback;
+  return value;
+}
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
@@ -17,10 +23,14 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
-      NEXT_PUBLIC_SUPABASE_URL:
-        process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://example.supabase.co",
-      NEXT_PUBLIC_SUPABASE_ANON_KEY:
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "test-anon-key"
+      NEXT_PUBLIC_SUPABASE_URL: envOrDefault(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        "https://example.supabase.co"
+      ),
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: envOrDefault(
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        "test-anon-key"
+      )
     }
   },
   projects: [
