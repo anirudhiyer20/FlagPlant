@@ -2,15 +2,9 @@ name: Web Smoke Tests
 
 on:
   pull_request:
-    paths:
-      - "web/**"
-      - ".github/workflows/web-smoke.yml"
   push:
     branches:
       - main
-    paths:
-      - "web/**"
-      - ".github/workflows/web-smoke.yml"
 
 jobs:
   web-smoke:

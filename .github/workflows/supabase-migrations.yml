@@ -2,17 +2,9 @@ name: Supabase Migrations
 
 on:
   pull_request:
-    paths:
-      - "supabase/**"
-      - "scripts/check-supabase-sql-policy.mjs"
-      - ".github/workflows/supabase-migrations.yml"
   push:
     branches:
       - main
-    paths:
-      - "supabase/**"
-      - "scripts/check-supabase-sql-policy.mjs"
-      - ".github/workflows/supabase-migrations.yml"
 
 jobs:
   sql-policy:
