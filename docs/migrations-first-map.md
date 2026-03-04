@@ -90,6 +90,18 @@ Do not do this:
 
 1. Create new `patch_*.sql` files for normal development.
 
+Guard command:
+
+```bash
+node scripts/check-supabase-sql-policy.mjs --staged
+```
+
+Optional auto-enforcement on commit:
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## 7) Quick Validation Checklist (After Any DB Change)
 
 1. Run smoke SQL scripts:

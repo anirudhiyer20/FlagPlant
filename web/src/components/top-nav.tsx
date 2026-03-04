@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAuthSession } from "@/components/session-provider";
 import { formatFlagAmount } from "@/lib/format";
+import { NET_WORTH_REFRESH_EVENT } from "@/lib/net-worth-events";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const items = [
@@ -15,38 +16,48 @@ const items = [
 ];
 
 const profileItem = { href: "/dashboard", label: "User Profile" };
-const NET_WORTH_CACHE_PREFIX = "flagplant:nav-net-worth:v1";
+const NET_WORTH_CACHE_PREFIX = "flagplant:nav-net-worth:v2";
+const NET_WORTH_CACHE_TTL_MS = 60_000;
+const ET_DAY_WATCH_INTERVAL_MS = 5 * 60 * 1000;
 
-function getEasternPart(date: Date, type: Intl.DateTimeFormatPartTypes): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  }).formatToParts(date);
+type NetWorthCacheEntry = {
+  value: number;
+  updatedAt: number;
+};
 
-  const value = parts.find((part) => part.type === type)?.value;
-  return Number.parseInt(value ?? "0", 10);
+function readCachedNetWorth(targetUserId: string): NetWorthCacheEntry | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(`${NET_WORTH_CACHE_PREFIX}:${targetUserId}`);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<NetWorthCacheEntry>;
+    if (
+      typeof parsed.value !== "number" ||
+      !Number.isFinite(parsed.value) ||
+      typeof parsed.updatedAt !== "number" ||
+      !Number.isFinite(parsed.updatedAt)
+    ) {
+      return null;
+    }
+    return { value: parsed.value, updatedAt: parsed.updatedAt };
+  } catch {
+    return null;
+  }
 }
 
-function getEasternDateString(date: Date): string {
+function writeCachedNetWorth(targetUserId: string, value: number) {
+  if (typeof window === "undefined") return;
+  const payload: NetWorthCacheEntry = { value, updatedAt: Date.now() };
+  window.localStorage.setItem(`${NET_WORTH_CACHE_PREFIX}:${targetUserId}`, JSON.stringify(payload));
+}
+
+function getEasternDateString(date: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York",
     year: "numeric",
     month: "2-digit",
     day: "2-digit"
   }).format(date);
-}
-
-// Daily cache bucket rolls at 08:00 ET.
-function getNetWorthCacheBucket(now: Date = new Date()): string {
-  const etHour = getEasternPart(now, "hour");
-  const baseDate = etHour < 8 ? new Date(now.getTime() - 8 * 60 * 60 * 1000) : now;
-  return getEasternDateString(baseDate);
 }
 
 export default function TopNav() {
@@ -62,19 +73,8 @@ export default function TopNav() {
   useEffect(() => {
     let active = true;
 
-    async function loadNetWorth(targetUserId: string) {
-      const bucket = getNetWorthCacheBucket();
-      const cacheKey = `${NET_WORTH_CACHE_PREFIX}:${targetUserId}:${bucket}`;
-      const cachedValue =
-        typeof window !== "undefined" ? window.localStorage.getItem(cacheKey) : null;
-
-      if (cachedValue !== null) {
-        const parsed = Number.parseFloat(cachedValue);
-        if (Number.isFinite(parsed)) {
-          setNetWorth(parsed);
-          return;
-        }
-      }
+    async function refreshNetWorth(targetUserId: string) {
+      if (typeof document !== "undefined" && document.hidden) return;
 
       const { data, error } = await supabase.rpc("get_public_profile_snapshot", {
         target_user_id: targetUserId
@@ -82,15 +82,14 @@ export default function TopNav() {
 
       if (!active) return;
       if (error) {
-        setNetWorth(null);
         return;
       }
 
       const row = ((data ?? []) as { result_net_worth?: number }[])[0];
       const value = row?.result_net_worth ?? null;
       setNetWorth(value);
-      if (typeof window !== "undefined" && value !== null) {
-        window.localStorage.setItem(cacheKey, String(value));
+      if (value !== null) {
+        writeCachedNetWorth(targetUserId, value);
       }
     }
 
@@ -101,15 +100,48 @@ export default function TopNav() {
       };
     }
 
-    loadNetWorth(currentUserId).catch(() => {
+    const cached = readCachedNetWorth(currentUserId);
+    if (cached && Date.now() - cached.updatedAt <= NET_WORTH_CACHE_TTL_MS) {
+      setNetWorth(cached.value);
+    }
+
+    refreshNetWorth(currentUserId).catch(() => {
       if (!active) return;
-      setNetWorth(null);
     });
+
+    function onFocus() {
+      void refreshNetWorth(currentUserId);
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) return;
+      void refreshNetWorth(currentUserId);
+    }
+
+    function onNetWorthRefresh() {
+      void refreshNetWorth(currentUserId);
+    }
+
+    let lastEasternDate = getEasternDateString();
+    const dayWatchIntervalId = window.setInterval(() => {
+      const nextEasternDate = getEasternDateString();
+      if (nextEasternDate === lastEasternDate) return;
+      lastEasternDate = nextEasternDate;
+      void refreshNetWorth(currentUserId);
+    }, ET_DAY_WATCH_INTERVAL_MS);
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener(NET_WORTH_REFRESH_EVENT, onNetWorthRefresh);
 
     return () => {
       active = false;
+      window.clearInterval(dayWatchIntervalId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener(NET_WORTH_REFRESH_EVENT, onNetWorthRefresh);
     };
-  }, [currentUserId, supabase]);
+  }, [currentUserId, pathname, supabase]);
 
   async function onSignOut() {
     setSigningOut(true);

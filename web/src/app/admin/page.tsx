@@ -7,6 +7,7 @@ import TopNav from "@/components/top-nav";
 import { formatEasternDateTime, getEasternDateString } from "@/lib/dates";
 import { formatFlagAmount, formatTwoDecimals } from "@/lib/format";
 import { LEAGUE_OPTIONS } from "@/lib/leagues";
+import { requestNetWorthRefresh } from "@/lib/net-worth-events";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type WinnerRow = {
@@ -583,6 +584,7 @@ function AdminPanel({ userId }: { userId: string }) {
 
     setDailyCloseRows(mapped);
     setMessage("Daily close pipeline completed.");
+    requestNetWorthRefresh("admin:daily-close");
     await loadPublishedForDate();
     await loadPendingBuySummary();
     await loadPendingSellSummary();
@@ -676,6 +678,7 @@ function AdminPanel({ userId }: { userId: string }) {
     setMessage(
       `Buy order execution complete. Executed: ${executedCount}. Failed: ${failedCount}.`
     );
+    requestNetWorthRefresh("admin:execute-buy-orders");
     await loadPendingBuySummary();
     await loadDiagnostics();
     setExecutingOrders(false);
@@ -747,6 +750,7 @@ function AdminPanel({ userId }: { userId: string }) {
     setMessage(
       `Sell order execution complete. Executed: ${executedCount}. Failed: ${failedCount}.`
     );
+    requestNetWorthRefresh("admin:execute-sell-orders");
     await loadPendingSellSummary();
     await loadDiagnostics();
     setExecutingSellOrders(false);
@@ -792,6 +796,7 @@ function AdminPanel({ userId }: { userId: string }) {
     const rows = (data ?? []) as RepricingRow[];
     setRepricingRows(rows);
     setMessage("Applied repricing and wrote daily player snapshots.");
+    requestNetWorthRefresh("admin:apply-repricing");
     await loadDiagnostics();
     setRepricingBusy(false);
   }
@@ -841,6 +846,7 @@ function AdminPanel({ userId }: { userId: string }) {
     setMessage(
       `Manual override applied: ${row.result_player_name} ${formatFlagAmount(row.result_previous_price)} -> ${formatFlagAmount(row.result_current_price)}.`
     );
+    requestNetWorthRefresh("admin:manual-price-override");
     setOverrideReason("");
     await loadManualOverridePlayers();
     setOverrideBusy(false);
@@ -921,6 +927,7 @@ function AdminPanel({ userId }: { userId: string }) {
     }
 
     setMessage("Published winners and applied wallet rewards.");
+    requestNetWorthRefresh("admin:publish-winners");
     setPreviewRows((data ?? []) as WinnerRow[]);
     await loadPublishedForDate();
     await loadDiagnostics();

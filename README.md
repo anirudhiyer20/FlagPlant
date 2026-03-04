@@ -122,6 +122,26 @@ A starter Next.js app now exists in `web/` with:
 - Legacy patch scripts are archived in `supabase/legacy-patches/` for historical reference only.
 - Detailed migration map and rollout checklist: `docs/migrations-first-map.md`.
 
+#### Guard Rails (Step 2)
+
+Use the policy check before committing DB changes:
+
+```bash
+node scripts/check-supabase-sql-policy.mjs --staged
+```
+
+Optional: enforce this automatically on each commit:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Then the pre-commit hook runs the same check and blocks:
+
+- new `supabase/patch_*.sql` files
+- edits to archived legacy patch files
+- new `supabase/*.sql` files outside migrations/smoke/seed paths
+
 ### Existing Project Upgrade Note
 
 If your current database is already working and has all prior patch changes applied,
