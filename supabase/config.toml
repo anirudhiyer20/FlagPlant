@@ -1,0 +1,8 @@
+project_id = "flagplant"
+
+[db]
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed_players.sql"]

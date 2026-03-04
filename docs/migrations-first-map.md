@@ -115,3 +115,17 @@ git config core.hooksPath .githooks
    - Buy/sell order
    - Daily close/cadence
    - Leaderboard/winner history
+
+## 8) Automated Migratability (Step 3)
+
+This repo includes CI workflow:
+
+- `.github/workflows/supabase-migrations.yml`
+
+It verifies that the database can be rebuilt from scratch using migration files.
+
+Local equivalent:
+
+1. `supabase start`
+2. `supabase db reset --local`
+3. `supabase stop --no-backup`

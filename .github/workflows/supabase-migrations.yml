@@ -1,0 +1,94 @@
+name: Supabase Migrations
+
+on:
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "scripts/check-supabase-sql-policy.mjs"
+      - ".github/workflows/supabase-migrations.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "supabase/**"
+      - "scripts/check-supabase-sql-policy.mjs"
+      - ".github/workflows/supabase-migrations.yml"
+
+jobs:
+  sql-policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate Supabase SQL policy
+        run: node scripts/check-supabase-sql-policy.mjs --all
+
+  migratability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: sql-policy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase stack
+        run: supabase start
+
+      - name: Reset local DB and apply migrations + seed
+        run: supabase db reset --local
+
+      - name: Verify key cadence functions exist
+        run: |
+          docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1 > db_container.txt
+          DB_CONTAINER=$(cat db_container.txt)
+          docker exec "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "
+            do \$\$
+            declare fn_count int;
+            begin
+              select count(*)::int
+              into fn_count
+              from pg_proc p
+              join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and p.proname in (
+                  'admin_run_daily_close',
+                  'system_run_daily_cadence',
+                  'system_run_daily_cadence_on_schedule'
+                );
+
+              if fn_count <> 3 then
+                raise exception 'Expected 3 key cadence functions, found %', fn_count;
+              end if;
+            end
+            \$\$;
+          "
+
+      - name: Verify seed loaded players
+        run: |
+          DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1)
+          docker exec "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "
+            do \$\$
+            declare player_count int;
+            begin
+              select count(*)::int into player_count from public.players;
+              if player_count <> 50 then
+                raise exception 'Expected 50 seeded players, found %', player_count;
+              end if;
+            end
+            \$\$;
+          "
+
+      - name: Stop local Supabase stack
+        if: always()
+        run: supabase stop --no-backup

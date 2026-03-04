@@ -142,6 +142,28 @@ Then the pre-commit hook runs the same check and blocks:
 - edits to archived legacy patch files
 - new `supabase/*.sql` files outside migrations/smoke/seed paths
 
+### Step 3: CLI/CI Migratability Check
+
+CI now includes `.github/workflows/supabase-migrations.yml`, which:
+
+1. runs the SQL policy guard
+2. starts a local Supabase stack
+3. runs `supabase db reset --local` (applies migrations + seed from scratch)
+4. verifies key functions and player seed rows exist
+
+Run this locally (optional, before pushing):
+
+```bash
+supabase start
+supabase db reset --local
+supabase stop --no-backup
+```
+
+Notes:
+
+- Requires Docker and Supabase CLI installed.
+- This check validates migratability on a fresh local database instance.
+
 ### Existing Project Upgrade Note
 
 If your current database is already working and has all prior patch changes applied,
