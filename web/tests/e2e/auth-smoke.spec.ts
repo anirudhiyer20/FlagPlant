@@ -54,6 +54,16 @@ test.describe("Authenticated Smoke", () => {
       name: "Edit Submitted Opinion"
     });
 
+    // Wait until opinion state finishes loading and one action is available.
+    await expect
+      .poll(
+        async () =>
+          (await submitButton.isVisible().catch(() => false)) ||
+          (await editSubmittedButton.isVisible().catch(() => false)),
+        { timeout: 15_000 }
+      )
+      .toBeTruthy();
+
     if (await submitButton.isVisible().catch(() => false)) {
       await page.getByLabel("Daily Opinion").fill(uniqueOpinion);
       await submitButton.click();
