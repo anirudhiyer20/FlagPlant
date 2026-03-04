@@ -163,6 +163,8 @@ Notes:
 
 - Requires Docker and Supabase CLI installed.
 - This check validates migratability on a fresh local database instance.
+- Seed integrity guard validates that seeded players are non-empty, valid, and name-unique.
+  You can add/remove players without updating CI constants.
 
 ### Existing Project Upgrade Note
 

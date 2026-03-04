@@ -79,11 +79,41 @@ jobs:
           DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1)
           docker exec "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "
             do \$\$
-            declare player_count int;
+            declare
+              player_count int;
+              invalid_row_count int;
+              duplicate_name_count int;
             begin
               select count(*)::int into player_count from public.players;
-              if player_count <> 50 then
-                raise exception 'Expected 50 seeded players, found %', player_count;
+              if player_count <= 0 then
+                raise exception 'Seed check failed: players table is empty';
+              end if;
+
+              select count(*)::int
+              into invalid_row_count
+              from public.players p
+              where btrim(coalesce(p.name, '')) = ''
+                 or btrim(coalesce(p.league, '')) = ''
+                 or p.seed_price is null
+                 or p.current_price is null
+                 or p.seed_price <= 0
+                 or p.current_price <= 0;
+
+              if invalid_row_count > 0 then
+                raise exception 'Seed check failed: found % invalid player rows', invalid_row_count;
+              end if;
+
+              select count(*)::int
+              into duplicate_name_count
+              from (
+                select lower(btrim(p.name)) as normalized_name
+                from public.players p
+                group by lower(btrim(p.name))
+                having count(*) > 1
+              ) dupes;
+
+              if duplicate_name_count > 0 then
+                raise exception 'Seed check failed: found % duplicate player names', duplicate_name_count;
               end if;
             end
             \$\$;
