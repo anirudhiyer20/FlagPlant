@@ -15,6 +15,19 @@ async function signIn(page: Page) {
   await page.getByLabel("Email").fill(testEmail ?? "");
   await page.getByLabel("Password").fill(testPassword ?? "");
   await page.getByRole("button", { name: "Sign in" }).click();
+
+  const authError = page.locator("p.error");
+  const signInFailed = authError
+    .waitFor({ state: "visible", timeout: 12_000 })
+    .then(async () => {
+      const message = (await authError.first().innerText()).trim();
+      throw new Error(
+        `E2E auth sign-in failed: ${message || "unknown error shown on /auth"}`
+      );
+    });
+
+  const dashboardLoaded = page.waitForURL(/\/dashboard/, { timeout: 12_000 });
+  await Promise.race([dashboardLoaded, signInFailed]);
   await expect(page).toHaveURL(/\/dashboard/);
 }
 
