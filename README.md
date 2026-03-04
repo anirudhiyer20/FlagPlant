@@ -166,6 +166,31 @@ Notes:
 - Seed integrity guard validates that seeded players are non-empty, valid, and name-unique.
   You can add/remove players without updating CI constants.
 
+### Step 1: Automated Testing Foundation
+
+Web smoke tests are implemented with Playwright under:
+
+- `web/tests/e2e/public-smoke.spec.ts`
+
+Run locally:
+
+```bash
+cd web
+npm run test:e2e:install
+npm run test:e2e:list
+npm run test:e2e
+```
+
+CI workflow:
+
+- `.github/workflows/web-smoke.yml`
+
+Current smoke scope:
+
+1. Home page renders hero content.
+2. Auth page renders sign-in form.
+3. Protected pages show signed-out guidance.
+
 ### Existing Project Upgrade Note
 
 If your current database is already working and has all prior patch changes applied,
