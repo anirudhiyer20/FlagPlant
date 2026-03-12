@@ -2,3 +2,4 @@ web/node_modules
 web/.next
 web/.env.local
 web/npm-debug.log*
+debug.log

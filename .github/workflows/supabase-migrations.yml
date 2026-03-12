@@ -111,6 +111,20 @@ jobs:
             \$\$;
           "
 
+      - name: Run SQL smoke suites
+        run: |
+          set -euo pipefail
+          DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1)
+          for smoke_file in \
+            supabase/smoke_01_daily_close_admin.sql \
+            supabase/smoke_02_vote_cadence_integrity.sql \
+            supabase/smoke_03_friends_leaderboard.sql \
+            supabase/smoke_04_daily_cadence_automation.sql
+          do
+            echo "Running ${smoke_file}..."
+            docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < "$smoke_file"
+          done
+
       - name: Stop local Supabase stack
         if: always()
         run: supabase stop --no-backup
