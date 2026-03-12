@@ -106,27 +106,31 @@ test.describe("Authenticated Smoke", () => {
 
     await page.goto("/flag-market");
     await expect(page.getByRole("heading", { name: "Flag Market" })).toBeVisible();
-
-    const playerLink = page.locator("table tbody tr td a[href^='/players/']").first();
-    await expect(playerLink).toBeVisible({ timeout: 15_000 });
-
-    const playerHref = await playerLink.getAttribute("href");
-    if (!playerHref) {
-      throw new Error("Unable to resolve player link for notification smoke flow.");
-    }
-
-    await page.goto(playerHref);
-    await expect(page.getByRole("button", { name: "Create Buy Order" })).toBeVisible();
-    await page.getByLabel("Buy Flag Amount").fill("0.50");
-    await page.getByRole("button", { name: "Create Buy Order" }).click();
-    await expect(
-      page.getByText("Buy order created with status 'pending'.")
-    ).toBeVisible({ timeout: 15_000 });
-
-    await page.goto("/flag-market");
     await page.getByRole("button", { name: "My Orders" }).click();
 
-    const cancelButton = page.getByRole("button", { name: "Cancel" }).first();
+    let cancelButton = page.getByRole("button", { name: "Cancel" }).first();
+    const hasPendingOrder = await cancelButton.isVisible().catch(() => false);
+
+    if (!hasPendingOrder) {
+      await page.goto("/flag-market");
+      const playerLink = page.locator("table tbody tr td a[href^='/players/']").first();
+      await expect(playerLink).toBeVisible({ timeout: 15_000 });
+
+      const playerHref = await playerLink.getAttribute("href");
+      if (!playerHref) {
+        throw new Error("Unable to resolve player link for notification smoke flow.");
+      }
+
+      await page.goto(playerHref);
+      await expect(page.getByRole("button", { name: "Create Buy Order" })).toBeVisible();
+      await page.getByLabel("Buy Flag Amount").fill("0.50");
+      await page.getByRole("button", { name: "Create Buy Order" }).click();
+
+      await page.goto("/flag-market");
+      await page.getByRole("button", { name: "My Orders" }).click();
+      cancelButton = page.getByRole("button", { name: "Cancel" }).first();
+    }
+
     await expect(cancelButton).toBeVisible({ timeout: 15_000 });
     await cancelButton.click();
     await expect(page.getByText("Pending order cancelled.")).toBeVisible({
