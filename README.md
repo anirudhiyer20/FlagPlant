@@ -152,6 +152,8 @@ CI now includes `.github/workflows/supabase-migrations.yml`, which:
 4. verifies key functions and player seed rows exist
 5. runs SQL smoke suites (`smoke_01` through `smoke_04`)
 
+This workflow runs on every pull request and on every push to `main`.
+
 Run this locally (optional, before pushing):
 
 ```bash
@@ -213,7 +215,7 @@ To enable authenticated smoke in CI:
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `E2E_TEST_EMAIL`
    - `E2E_TEST_PASSWORD`
-5. Push a commit touching `web/**` and confirm `Web Smoke Tests` runs authenticated smoke.
+5. Push any commit and confirm `Web Smoke Tests` runs authenticated smoke.
 
 ### Existing Project Upgrade Note
 
