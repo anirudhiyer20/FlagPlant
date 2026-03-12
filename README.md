@@ -153,6 +153,7 @@ CI now includes `.github/workflows/supabase-migrations.yml`, which:
 5. runs SQL smoke suites (`smoke_01` through `smoke_04`)
 
 This workflow runs on every pull request and on every push to `main`.
+For PRs without DB-related file changes, `migratability` fast-skips heavy DB boot/reset steps and exits quickly.
 
 Run this locally (optional, before pushing):
 
