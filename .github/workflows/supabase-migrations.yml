@@ -29,18 +29,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect DB-related changes
+        id: db_changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            db:
+              - "supabase/**"
+              - ".github/workflows/supabase-migrations.yml"
+              - "scripts/check-supabase-sql-policy.mjs"
+
+      - name: Skip heavy migratability (no DB changes)
+        if: steps.db_changes.outputs.db != 'true'
+        run: echo "No DB-related files changed; skipping heavy migratability checks."
+
       - name: Setup Supabase CLI
+        if: steps.db_changes.outputs.db == 'true'
         uses: supabase/setup-cli@v1
         with:
           version: latest
 
       - name: Start local Supabase stack
+        if: steps.db_changes.outputs.db == 'true'
         run: supabase start
 
       - name: Reset local DB and apply migrations + seed
+        if: steps.db_changes.outputs.db == 'true'
         run: supabase db reset --local
 
       - name: Verify key cadence functions exist
+        if: steps.db_changes.outputs.db == 'true'
         run: |
           docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1 > db_container.txt
           DB_CONTAINER=$(cat db_container.txt)
@@ -67,6 +85,7 @@ jobs:
           "
 
       - name: Verify seed loaded players
+        if: steps.db_changes.outputs.db == 'true'
         run: |
           DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1)
           docker exec "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c "
@@ -112,25 +131,29 @@ jobs:
           "
 
       - name: Run smoke 01 (daily close admin)
+        if: steps.db_changes.outputs.db == 'true'
         run: |
           DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1)
           docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke_01_daily_close_admin.sql
 
       - name: Run smoke 02 (vote cadence integrity)
+        if: steps.db_changes.outputs.db == 'true'
         run: |
           DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1)
           docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke_02_vote_cadence_integrity.sql
 
       - name: Run smoke 03 (friends leaderboard)
+        if: steps.db_changes.outputs.db == 'true'
         run: |
           DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1)
           docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke_03_friends_leaderboard.sql
 
       - name: Run smoke 04 (daily cadence automation)
+        if: steps.db_changes.outputs.db == 'true'
         run: |
           DB_CONTAINER=$(docker ps --format '{{.Names}}' | grep 'supabase_db' | head -n 1)
           docker exec -i "$DB_CONTAINER" psql -U postgres -d postgres -v ON_ERROR_STOP=1 < supabase/smoke_04_daily_cadence_automation.sql
 
       - name: Stop local Supabase stack
-        if: always()
+        if: always() && steps.db_changes.outputs.db == 'true'
         run: supabase stop --no-backup
