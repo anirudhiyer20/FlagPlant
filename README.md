@@ -189,6 +189,26 @@ CI workflow:
 
 - `.github/workflows/web-smoke.yml`
 
+### PR + Auto-Merge Quickstart
+
+Use this flow for every change going into `main`:
+
+1. Push your branch.
+2. Open a pull request to `main`.
+3. Confirm required checks appear:
+   - `web-smoke`
+   - `sql-policy`
+   - `migratability`
+4. Click **Enable auto-merge** on the PR.
+5. Pick merge method (recommended: **Squash and merge**).
+6. GitHub will merge automatically as soon as all required checks pass.
+
+Notes:
+
+- `migratability` always runs, but fast-skips heavy DB boot/reset when no DB-related files changed.
+- Branch protection blocks direct pushes to `main` by design.
+- Full command playbook: `docs/git-cadence.md`.
+
 Current smoke scope:
 
 1. Home page renders hero content.
