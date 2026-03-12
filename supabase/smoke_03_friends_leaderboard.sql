@@ -9,9 +9,9 @@ select set_config(
     (select id::text from public.profiles order by created_at asc limit 1),
     '00000000-0000-0000-0000-000000000001'
   ),
-  true
+  false
 );
-select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.role', 'authenticated', false);
 
 select auth.uid() as acting_user_id;
 

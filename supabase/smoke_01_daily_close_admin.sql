@@ -24,8 +24,8 @@ begin
   if admin_id is null then
     raise notice 'No admin profile row found; running checks as postgres/supabase_admin.';
   else
-    perform set_config('request.jwt.claim.sub', admin_id, true);
-    perform set_config('request.jwt.claim.role', 'authenticated', true);
+    perform set_config('request.jwt.claim.sub', admin_id, false);
+    perform set_config('request.jwt.claim.role', 'authenticated', false);
   end if;
 end
 $$;
