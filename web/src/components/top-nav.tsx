@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuthSession } from "@/components/session-provider";
 import { formatFlagAmount } from "@/lib/format";
 import { NET_WORTH_REFRESH_EVENT } from "@/lib/net-worth-events";
+import { NOTIFICATION_REFRESH_EVENT } from "@/lib/notification-events";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const items = [
@@ -19,6 +20,7 @@ const profileItem = { href: "/dashboard", label: "User Profile" };
 const NET_WORTH_CACHE_PREFIX = "flagplant:nav-net-worth:v2";
 const NET_WORTH_CACHE_TTL_MS = 60_000;
 const ET_DAY_WATCH_INTERVAL_MS = 5 * 60 * 1000;
+const NOTIFICATION_POLL_INTERVAL_MS = 2 * 60 * 1000;
 
 type NetWorthCacheEntry = {
   value: number;
@@ -60,6 +62,12 @@ function getEasternDateString(date: Date = new Date()): string {
   }).format(date);
 }
 
+function formatNotificationBadgeCount(count: number): string {
+  if (!Number.isFinite(count) || count <= 0) return "0";
+  if (count > 99) return "99+";
+  return String(count);
+}
+
 export default function TopNav() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), []);
   const pathname = usePathname();
@@ -68,7 +76,10 @@ export default function TopNav() {
   const isLoggedIn = Boolean(session);
   const currentUserId = session?.user.id ?? null;
   const [netWorth, setNetWorth] = useState<number | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -143,6 +154,89 @@ export default function TopNav() {
     };
   }, [currentUserId, pathname, supabase]);
 
+  useEffect(() => {
+    setAccountMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+
+    function onPointerDown(event: MouseEvent) {
+      if (!accountMenuRef.current) return;
+      const target = event.target as Node | null;
+      if (!target || accountMenuRef.current.contains(target)) return;
+      setAccountMenuOpen(false);
+    }
+
+    function onEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setAccountMenuOpen(false);
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onEscape);
+
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [accountMenuOpen]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function refreshUnreadCount(targetUserId: string) {
+      if (typeof document !== "undefined" && document.hidden) return;
+
+      const { data, error } = await supabase.rpc("get_unread_notification_count");
+      if (!active || error) return;
+
+      const row = ((data ?? []) as { result_unread_count?: number }[])[0];
+      const nextCount = row?.result_unread_count ?? 0;
+      setUnreadNotifications(nextCount);
+    }
+
+    if (!currentUserId) {
+      setUnreadNotifications(0);
+      return () => {
+        active = false;
+      };
+    }
+
+    refreshUnreadCount(currentUserId).catch(() => {
+      if (!active) return;
+    });
+
+    function onFocus() {
+      void refreshUnreadCount(currentUserId);
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) return;
+      void refreshUnreadCount(currentUserId);
+    }
+
+    function onNotificationRefresh() {
+      void refreshUnreadCount(currentUserId);
+    }
+
+    const pollIntervalId = window.setInterval(() => {
+      void refreshUnreadCount(currentUserId);
+    }, NOTIFICATION_POLL_INTERVAL_MS);
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener(NOTIFICATION_REFRESH_EVENT, onNotificationRefresh);
+
+    return () => {
+      active = false;
+      window.clearInterval(pollIntervalId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener(NOTIFICATION_REFRESH_EVENT, onNotificationRefresh);
+    };
+  }, [currentUserId, pathname, supabase]);
+
   async function onSignOut() {
     setSigningOut(true);
     await signOut();
@@ -182,33 +276,64 @@ export default function TopNav() {
         );
       })}
       {isLoggedIn ? (
-        <button type="button" className="nav-networth" disabled>
-          Net Worth: {formatFlagAmount(netWorth)}
-        </button>
-      ) : null}
-      <Link
-        href={profileItem.href}
-        className={`${
-          pathname === profileItem.href || pathname.startsWith(profileItem.href)
-            ? "active"
-            : ""
-        } profile-link ${!isLoggedIn ? "push-right" : ""}`.trim()}
-      >
-        {profileItem.label}
-      </Link>
-      {isLoggedIn ? (
-        <button
-          type="button"
-          className="nav-signout"
-          onClick={onSignOut}
-          disabled={signingOut}
-        >
-          {signingOut ? "Signing out..." : "Sign out"}
-        </button>
+        <div className="nav-account-wrap" ref={accountMenuRef}>
+          <button
+            type="button"
+            className={`nav-account-toggle ${
+              pathname.startsWith("/notifications") || pathname.startsWith(profileItem.href)
+                ? "active"
+                : ""
+            }`}
+            onClick={() => setAccountMenuOpen((previous) => !previous)}
+            aria-expanded={accountMenuOpen}
+            aria-haspopup="menu"
+          >
+            Account
+            {unreadNotifications > 0 ? (
+              <span className="nav-badge">{formatNotificationBadgeCount(unreadNotifications)}</span>
+            ) : null}
+          </button>
+          {accountMenuOpen ? (
+            <div className="nav-account-menu" role="menu" aria-label="Account Menu">
+              <div className="nav-account-networth" role="status" aria-live="polite">
+                <span className="muted">Net Worth</span>
+                <strong>{formatFlagAmount(netWorth)}</strong>
+              </div>
+              <Link
+                href={profileItem.href}
+                className="nav-account-link"
+                role="menuitem"
+                onClick={() => setAccountMenuOpen(false)}
+              >
+                {profileItem.label}
+              </Link>
+              <Link
+                href="/notifications"
+                className="nav-account-link"
+                role="menuitem"
+                onClick={() => setAccountMenuOpen(false)}
+              >
+                Notifications
+                {unreadNotifications > 0 ? (
+                  <span className="nav-badge">{formatNotificationBadgeCount(unreadNotifications)}</span>
+                ) : null}
+              </Link>
+              <button
+                type="button"
+                className="nav-account-signout"
+                onClick={onSignOut}
+                disabled={signingOut}
+                role="menuitem"
+              >
+                {signingOut ? "Signing out..." : "Sign out"}
+              </button>
+            </div>
+          ) : null}
+        </div>
       ) : (
         <button
           type="button"
-          className="nav-signout"
+          className="nav-signin push-right"
           onClick={() => router.push(getAuthHrefWithReturnPath())}
         >
           Sign in
