@@ -150,6 +150,7 @@ CI now includes `.github/workflows/supabase-migrations.yml`, which:
 2. starts a local Supabase stack
 3. runs `supabase db reset --local` (applies migrations + seed from scratch)
 4. verifies key functions and player seed rows exist
+5. runs SQL smoke suites (`smoke_01` through `smoke_04`)
 
 Run this locally (optional, before pushing):
 
@@ -231,6 +232,9 @@ Going forward:
 - `supabase/smoke_02_vote_cadence_integrity.sql`: validates ET D->D+1 opinion/vote cadence.
 - `supabase/smoke_03_friends_leaderboard.sql`: validates global vs friends-only leaderboard scope.
 - `supabase/smoke_04_daily_cadence_automation.sql`: validates cron job + cadence automation function wiring.
+
+These smoke suites now run automatically in CI during `Supabase Migrations`.
+You can still run them manually in Supabase SQL Editor for ad-hoc diagnostics.
 
 ### Time Standard (ET)
 

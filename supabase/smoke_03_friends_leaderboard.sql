@@ -2,12 +2,16 @@
 -- Run in Supabase SQL Editor.
 
 -- 1) Set SQL session auth context to first user.
+-- Fallback UUID keeps this script runnable on fresh environments with no profiles.
 select set_config(
   'request.jwt.claim.sub',
-  (select id::text from public.profiles order by created_at asc limit 1),
-  true
+  coalesce(
+    (select id::text from public.profiles order by created_at asc limit 1),
+    '00000000-0000-0000-0000-000000000001'
+  ),
+  false
 );
-select set_config('request.jwt.claim.role', 'authenticated', true);
+select set_config('request.jwt.claim.role', 'authenticated', false);
 
 select auth.uid() as acting_user_id;
 
@@ -15,7 +19,7 @@ select auth.uid() as acting_user_id;
 select count(*) as global_rows
 from public.get_leaderboard_snapshot_scoped('global');
 
--- 3) Friends-only snapshot should return at least self row.
+-- 3) Friends-only snapshot should execute without error.
 select count(*) as friends_only_rows
 from public.get_leaderboard_snapshot_scoped('friends_only');
 

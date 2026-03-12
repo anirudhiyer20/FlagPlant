@@ -7,13 +7,28 @@ from public.profiles
 where role = 'admin'
 order by created_at asc;
 
--- 2) Set SQL session auth context to first admin.
-select set_config(
-  'request.jwt.claim.sub',
-  (select id::text from public.profiles where role = 'admin' order by created_at asc limit 1),
-  true
-);
-select set_config('request.jwt.claim.role', 'authenticated', true);
+-- 2) Set SQL session auth context to first admin (if present).
+-- If no admin profile exists, keep auth.uid() null so postgres/supabase_admin
+-- can still execute admin function checks via assert_admin() bypass.
+do $$
+declare
+  admin_id text;
+begin
+  select p.id::text
+  into admin_id
+  from public.profiles p
+  where p.role = 'admin'
+  order by p.created_at asc
+  limit 1;
+
+  if admin_id is null then
+    raise notice 'No admin profile row found; running checks as postgres/supabase_admin.';
+  else
+    perform set_config('request.jwt.claim.sub', admin_id, false);
+    perform set_config('request.jwt.claim.role', 'authenticated', false);
+  end if;
+end
+$$;
 
 -- 3) Verify context.
 select auth.uid() as acting_user_id;
