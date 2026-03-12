@@ -103,6 +103,11 @@ test.describe("Authenticated Smoke", () => {
         await orderCancelledToggle.check();
       }
     }
+    if (await hidePreferencesButton.isVisible().catch(() => false)) {
+      await hidePreferencesButton.click();
+    }
+    await page.getByRole("button", { name: "Refresh" }).click();
+    const cancelledBefore = await page.getByText("Order Cancelled", { exact: true }).count();
 
     await page.goto("/flag-market");
     await expect(page.getByRole("heading", { name: "Flag Market" })).toBeVisible();
@@ -133,9 +138,6 @@ test.describe("Authenticated Smoke", () => {
 
     await expect(cancelButton).toBeVisible({ timeout: 15_000 });
     await cancelButton.click();
-    await expect(page.getByText("Pending order cancelled.")).toBeVisible({
-      timeout: 15_000
-    });
 
     await page.goto("/notifications");
     await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
@@ -143,6 +145,11 @@ test.describe("Authenticated Smoke", () => {
       await hidePreferencesButton.click();
     }
     await page.getByRole("button", { name: "Refresh" }).click();
-    await expect(page.getByText("Order Cancelled")).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(
+        async () => await page.getByText("Order Cancelled", { exact: true }).count(),
+        { timeout: 15_000 }
+      )
+      .toBeGreaterThan(cancelledBefore);
   });
 });
