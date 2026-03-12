@@ -82,6 +82,28 @@ test.describe("Authenticated Smoke", () => {
   test("cancel pending order and verify notification appears", async ({ page }) => {
     await signIn(page);
 
+    // Ensure this event type is enabled so the test remains deterministic.
+    await page.goto("/notifications");
+    await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
+    const changePreferencesButton = page.getByRole("button", {
+      name: "Change Notification Preferences"
+    });
+    const hidePreferencesButton = page.getByRole("button", {
+      name: "Hide Notification Preferences"
+    });
+    if (await changePreferencesButton.isVisible().catch(() => false)) {
+      await changePreferencesButton.click();
+    }
+    await expect
+      .poll(async () => await page.getByLabel("Order Cancelled").isVisible().catch(() => false), {
+        timeout: 10_000
+      })
+      .toBeTruthy();
+    const orderCancelledToggle = page.getByLabel("Order Cancelled");
+    if (!(await orderCancelledToggle.isChecked())) {
+      await orderCancelledToggle.check();
+    }
+
     await page.goto("/flag-market");
     await expect(page.getByRole("heading", { name: "Flag Market" })).toBeVisible();
 
@@ -113,6 +135,12 @@ test.describe("Authenticated Smoke", () => {
 
     await page.goto("/notifications");
     await expect(page.getByRole("heading", { name: "Notifications" })).toBeVisible();
+    if (await changePreferencesButton.isVisible().catch(() => false)) {
+      await changePreferencesButton.click();
+    } else if (await hidePreferencesButton.isVisible().catch(() => false)) {
+      await hidePreferencesButton.click();
+    }
+    await page.getByRole("button", { name: "Refresh" }).click();
     await expect(page.getByText("Order Cancelled")).toBeVisible({ timeout: 15_000 });
   });
 });
